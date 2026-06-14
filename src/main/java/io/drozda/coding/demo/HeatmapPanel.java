@@ -10,10 +10,10 @@ public class HeatmapPanel extends JPanel {
     private static final int TIME_BUCKETS = 800;
 
     private final int[][] heatmap = new int[PRICE_LEVELS][TIME_BUCKETS];
-    private final Random random = new Random();
+    private final EventGenerator eventGenerator = new EventGenerator();
 
     public HeatmapPanel() {
-        Timer timer = new Timer(100, e -> {
+        Timer timer = new Timer(16, e -> {
             generateFakeData();
             repaint();
         });
@@ -21,19 +21,27 @@ public class HeatmapPanel extends JPanel {
     }
 
     private void generateFakeData() {
-        // shift time left
+        // 1. Сдвигаем всю картинку влево на 1 колонку
         for (int y = 0; y < PRICE_LEVELS; y++) {
             System.arraycopy(heatmap[y], 1, heatmap[y], 0, TIME_BUCKETS - 1);
             heatmap[y][TIME_BUCKETS - 1] = 0;
         }
 
-        int middle = PRICE_LEVELS / 2;
 
-        for (int i = 0; i < 100; i++) {
-            int price = middle + random.nextInt(80) - 40;
+        for (int i = 0; i < 1000; i++) {
+            BookEvent event = eventGenerator.nextEvent();
 
-            if (price >= 0 && price < PRICE_LEVELS) {
-                heatmap[price][TIME_BUCKETS - 1] += random.nextInt(100);
+            int priceLevel = event.price() - 900;
+
+            if (priceLevel >= 0 && priceLevel < PRICE_LEVELS) {
+                if (event.type() == EventType.ADD) {
+                    heatmap[priceLevel][TIME_BUCKETS - 1] += event.volume();
+                } else if (event.type() == EventType.CANCEL || event.type() == EventType.TRADE) {
+                    heatmap[priceLevel][TIME_BUCKETS - 1] -= event.volume();
+                    if (heatmap[priceLevel][TIME_BUCKETS - 1] < 0) {
+                        heatmap[priceLevel][TIME_BUCKETS - 1] = 0;
+                    }
+                }
             }
         }
     }
