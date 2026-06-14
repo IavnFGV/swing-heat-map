@@ -41,32 +41,36 @@ final class DepthViewPanel extends JPanel {
         g.fillRect(0, 0, getWidth(), getHeight());
 
         // Copy current depth quickly, then draw without holding the market lock.
-        DepthSnapshot snapshot = snapshot();
-        int maxVisibleVolume = maxVisibleVolume(snapshot);
+        final DepthSnapshot[] snapshot = new DepthSnapshot[1];
+        Profiler.measure(Profiler.EventType.DEPTH_SNAPSHOT, () -> snapshot[0] = snapshot());
 
-        for (int level = 0; level < MarketConfig.PRICE_LEVELS; level++) {
-            int y = PriceScale.levelToY(level, getHeight());
-            int nextY = PriceScale.levelToY(level - 1, getHeight());
-            int rowH = Math.max(1, nextY - y);
-            int price = MarketConfig.levelToPrice(level);
-            int bidVolume = snapshot.bidVolumes[level];
-            int askVolume = snapshot.askVolumes[level];
+        Profiler.measure(Profiler.EventType.DEPTH_PAINT, () -> {
+            int maxVisibleVolume = maxVisibleVolume(snapshot[0]);
 
-            if (price == snapshot.referencePrice) {
-                g.setColor(new Color(70, 98, 104));
-                g.fillRect(0, y, getWidth(), rowH);
+            for (int level = 0; level < MarketConfig.PRICE_LEVELS; level++) {
+                int y = PriceScale.levelToY(level, getHeight());
+                int nextY = PriceScale.levelToY(level - 1, getHeight());
+                int rowH = Math.max(1, nextY - y);
+                int price = MarketConfig.levelToPrice(level);
+                int bidVolume = snapshot[0].bidVolumes[level];
+                int askVolume = snapshot[0].askVolumes[level];
+
+                if (price == snapshot[0].referencePrice) {
+                    g.setColor(new Color(70, 98, 104));
+                    g.fillRect(0, y, getWidth(), rowH);
+                }
+
+                int bidW = (int) ((getWidth() * MAX_BAR_WIDTH_RATIO) * (bidVolume / (double) maxVisibleVolume));
+                int askW = (int) ((getWidth() * MAX_BAR_WIDTH_RATIO) * (askVolume / (double) maxVisibleVolume));
+
+                g.setColor(new Color(53, 191, 111, 160));
+                g.fillRect(0, y, bidW, rowH);
+                g.setColor(new Color(207, 60, 72, 160));
+                g.fillRect(getWidth() - askW, y, askW, rowH);
             }
 
-            int bidW = (int) ((getWidth() * MAX_BAR_WIDTH_RATIO) * (bidVolume / (double) maxVisibleVolume));
-            int askW = (int) ((getWidth() * MAX_BAR_WIDTH_RATIO) * (askVolume / (double) maxVisibleVolume));
-
-            g.setColor(new Color(53, 191, 111, 160));
-            g.fillRect(0, y, bidW, rowH);
-            g.setColor(new Color(207, 60, 72, 160));
-            g.fillRect(getWidth() - askW, y, askW, rowH);
-        }
-
-        drawPriceLabels(g, snapshot);
+            drawPriceLabels(g, snapshot[0]);
+        });
 
         drawHeader(g);
     }

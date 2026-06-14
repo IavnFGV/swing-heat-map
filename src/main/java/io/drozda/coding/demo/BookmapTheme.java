@@ -21,19 +21,27 @@ final class BookmapTheme {
     }
 
     static Color heatColor(int volume) {
+        return new Color(heatRgb(volume));
+    }
+
+    static int heatRgb(int volume) {
         int intensity = (int) Math.min(255, Math.log1p(volume) * 22);
         double t = intensity / 255.0;
         if (t < 0.55) {
-            return blend(HEAT_LOW, HEAT_MID, t / 0.55);
+            return blendRgb(HEAT_LOW, HEAT_MID, t / 0.55);
         }
-        return blend(HEAT_MID, HEAT_HIGH, (t - 0.55) / 0.45);
+        return blendRgb(HEAT_MID, HEAT_HIGH, (t - 0.55) / 0.45);
     }
 
     private static Color blend(Color from, Color to, double t) {
+        return new Color(blendRgb(from, to, t));
+    }
+
+    private static int blendRgb(Color from, Color to, double t) {
         double clamped = Math.max(0.0, Math.min(1.0, t));
         int r = (int) (from.getRed() + (to.getRed() - from.getRed()) * clamped);
         int g = (int) (from.getGreen() + (to.getGreen() - from.getGreen()) * clamped);
         int b = (int) (from.getBlue() + (to.getBlue() - from.getBlue()) * clamped);
-        return new Color(r, g, b);
+        return (r << 16) | (g << 8) | b;
     }
 }

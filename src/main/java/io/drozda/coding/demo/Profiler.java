@@ -48,6 +48,12 @@ public class Profiler {
         NEXT_EVENTS,
         ORDERBOOK_APPLY,
         PAINT,
+        HEATMAP_SNAPSHOT,
+        HEATMAP_PAINT,
+        DEPTH_SNAPSHOT,
+        DEPTH_PAINT,
+        ACTIVITY_SNAPSHOT,
+        ACTIVITY_PAINT,
         SCROLL_COPY
     }
 }

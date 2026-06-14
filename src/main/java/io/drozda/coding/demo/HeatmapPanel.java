@@ -232,6 +232,7 @@ public class HeatmapPanel extends JPanel {
         sb.append("1  -> SHIFT_COPY\n");
         sb.append("2  -> CIRCULAR_BUFFER\n");
         sb.append("M  -> switch data mode\n");
+        sb.append("C  -> clear state\n");
         sb.append("[  -> zoom out time scale\n");
         sb.append("]  -> zoom in time scale\n");
         sb.append("+  -> increase load\n");
@@ -275,6 +276,18 @@ public class HeatmapPanel extends JPanel {
             @Override
             public void actionPerformed(java.awt.event.ActionEvent e) {
                 switchDataMode();
+            }
+        });
+
+        getInputMap(WHEN_IN_FOCUSED_WINDOW).put(KeyStroke.getKeyStroke('c'), "clear");
+        getInputMap(WHEN_IN_FOCUSED_WINDOW).put(KeyStroke.getKeyStroke('C'), "clear");
+        getActionMap().put("clear", new AbstractAction() {
+            @Override
+            public void actionPerformed(java.awt.event.ActionEvent e) {
+                synchronized (state) {
+                    state.reset(dataMode);
+                }
+                repaintAllViews();
             }
         });
 

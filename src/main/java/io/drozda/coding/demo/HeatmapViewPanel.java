@@ -9,6 +9,8 @@ import java.awt.Graphics2D;
 import java.awt.Rectangle;
 import java.awt.RenderingHints;
 import java.awt.Stroke;
+import java.awt.image.BufferedImage;
+import java.awt.image.DataBufferInt;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
@@ -19,6 +21,7 @@ final class HeatmapViewPanel extends JPanel {
             DateTimeFormatter.ofPattern("HH:mm:ss").withZone(ZoneId.systemDefault());
 
     private final MarketViewState state;
+    private BufferedImage heatmapImage;
 
     HeatmapViewPanel(MarketViewState state) {
         this.state = state;
@@ -61,13 +64,16 @@ final class HeatmapViewPanel extends JPanel {
         // Copy the visible state quickly, then release the market lock before
         // doing expensive Swing drawing. This is the first step toward a proper
         // published render frame / double-buffer model.
-        HeatmapSnapshot snapshot = snapshot(plot);
+        final HeatmapSnapshot[] snapshot = new HeatmapSnapshot[1];
+        Profiler.measure(Profiler.EventType.HEATMAP_SNAPSHOT, () -> snapshot[0] = snapshot(plot));
 
-        drawHeatmap(g, plot, snapshot);
-        drawGrid(g, plot, priceAxis, snapshot);
-        drawMidLine(g, plot, snapshot);
-        drawPriceHistory(g, snapshot.bestBidPrices, BookmapTheme.BID, plot);
-        drawPriceHistory(g, snapshot.bestAskPrices, BookmapTheme.ASK, plot);
+        Profiler.measure(Profiler.EventType.HEATMAP_PAINT, () -> {
+            drawHeatmap(g, plot, snapshot[0]);
+            drawGrid(g, plot, priceAxis, snapshot[0]);
+            drawMidLine(g, plot, snapshot[0]);
+            drawPriceHistory(g, snapshot[0].bestBidPrices, BookmapTheme.BID, plot);
+            drawPriceHistory(g, snapshot[0].bestAskPrices, BookmapTheme.ASK, plot);
+        });
     }
 
     private HeatmapSnapshot snapshot(Rectangle plot) {
@@ -113,20 +119,27 @@ final class HeatmapViewPanel extends JPanel {
     }
 
     private void drawHeatmap(Graphics2D g, Rectangle plot, HeatmapSnapshot snapshot) {
-        // Paint by visible pixels instead of by the full data matrix.
-        // With 2_000 x 5_000 buckets the raw matrix has 10M cells; the panel
-        // usually has far fewer pixels than that.
+        ensureHeatmapImage(plot.width, plot.height);
+
+        int[] pixels = ((DataBufferInt) heatmapImage.getRaster().getDataBuffer()).getData();
+        int background = new Color(10, 22, 26).getRGB();
+
         for (int screenY = 0; screenY < plot.height; screenY++) {
             for (int screenX = 0; screenX < plot.width; screenX++) {
                 int volume = snapshot.volumes[screenY * plot.width + screenX];
 
-                if (volume == 0) {
-                    continue;
-                }
-
-                g.setColor(BookmapTheme.heatColor(volume));
-                g.fillRect(plot.x + screenX, plot.y + screenY, 1, 1);
+                pixels[screenY * plot.width + screenX] = volume == 0
+                        ? background
+                        : BookmapTheme.heatRgb(volume);
             }
+        }
+
+        g.drawImage(heatmapImage, plot.x, plot.y, null);
+    }
+
+    private void ensureHeatmapImage(int width, int height) {
+        if (heatmapImage == null || heatmapImage.getWidth() != width || heatmapImage.getHeight() != height) {
+            heatmapImage = new BufferedImage(width, height, BufferedImage.TYPE_INT_RGB);
         }
     }
 

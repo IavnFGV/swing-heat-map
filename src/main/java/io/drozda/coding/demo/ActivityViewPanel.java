@@ -58,12 +58,15 @@ final class ActivityViewPanel extends JPanel {
             g.drawLine(volumePlot.x, y, volumePlot.x + volumePlot.width, y);
         }
 
-        ActivitySnapshot snapshot = snapshot(plot.width);
+        final ActivitySnapshot[] snapshot = new ActivitySnapshot[1];
+        Profiler.measure(Profiler.EventType.ACTIVITY_SNAPSHOT, () -> snapshot[0] = snapshot(plot.width));
 
-        drawVolumeBars(g, volumePlot, snapshot);
-        drawZeroLine(g, volumePlot);
-        drawDeltaBars(g, volumePlot, snapshot);
-        drawCvdLine(g, cvdPlot, snapshot);
+        Profiler.measure(Profiler.EventType.ACTIVITY_PAINT, () -> {
+            drawVolumeBars(g, volumePlot, snapshot[0]);
+            drawZeroLine(g, volumePlot);
+            drawDeltaBars(g, volumePlot, snapshot[0]);
+            drawCvdLine(g, cvdPlot, snapshot[0]);
+        });
     }
 
     private ActivitySnapshot snapshot(int width) {
