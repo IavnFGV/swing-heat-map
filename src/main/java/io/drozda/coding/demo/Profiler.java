@@ -24,6 +24,10 @@ public class Profiler {
         return metrics.get(name);
     }
 
+    public static void record(EventType name, double millis) {
+        metrics.put(name, millis);
+    }
+
     public static String report() {
         StringBuilder sb = new StringBuilder();
         for (Map.Entry<EventType, Double> entry : metrics.entrySet()) {
@@ -40,6 +44,9 @@ public class Profiler {
     public enum EventType {
         APPLY_EVENTS,
         GEN_DATA,
+        STATE_LOCK_WAIT,
+        NEXT_EVENTS,
+        ORDERBOOK_APPLY,
         PAINT,
         SCROLL_COPY
     }

@@ -7,18 +7,22 @@ public class OrderBook {
     private final int[] askVolumes = new int[MarketConfig.PRICE_LEVELS];
 
     public void apply(BookEvent event) {
-        int priceLevel = MarketConfig.priceToLevel(event.price());
+        apply(event.side(), event.price(), event.volume(), event.type());
+    }
+
+    public void apply(Side side, int price, int volume, EventType type) {
+        int priceLevel = MarketConfig.priceToLevel(price);
 
         if (priceLevel < 0 || priceLevel >= MarketConfig.PRICE_LEVELS) {
             return;
         }
 
-        int[] sideVolumes = event.side() == Side.BID ? bidVolumes : askVolumes;
+        int[] sideVolumes = side == Side.BID ? bidVolumes : askVolumes;
 
-        switch (event.type()) {
-            case ADD -> sideVolumes[priceLevel] += event.volume();
+        switch (type) {
+            case ADD -> sideVolumes[priceLevel] += volume;
             case CANCEL, TRADE -> sideVolumes[priceLevel] =
-                    Math.max(0, sideVolumes[priceLevel] - event.volume());
+                    Math.max(0, sideVolumes[priceLevel] - volume);
         }
     }
 

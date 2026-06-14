@@ -38,7 +38,7 @@ public class HeatmapPanel extends JPanel {
     private static EventGenerator createEventGenerator(DataMode dataMode) {
         if (dataMode == DataMode.SYNTHETIC_STRESS) {
             PriceDisplay.clearRealPrices();
-            return new EventGenerator();
+            return new SyntheticStressGenerator();
         }
 
         Path csvPath = Path.of("BTCUSDT-aggTrades-2026-06-12.csv");

@@ -49,6 +49,18 @@ public class EventGenerator {
         return events;
     }
 
+    public void generateColumnEvents(int maxEvents, BookEventSink sink) {
+        for (BookEvent event : nextColumnEvents(maxEvents)) {
+            sink.accept(
+                    event.timestampNanos(),
+                    event.side(),
+                    event.price(),
+                    event.volume(),
+                    event.type()
+            );
+        }
+    }
+
     private void maybeChangeRegime() {
         eventsSinceRegimeChange++;
 

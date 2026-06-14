@@ -1,7 +1,6 @@
 package io.drozda.coding.demo;
 
 import java.util.Arrays;
-import java.util.List;
 
 final class MarketViewState {
     static final int RAW_SAMPLE_MS = 20;
@@ -65,7 +64,20 @@ final class MarketViewState {
         totalTradedVolume = 0;
     }
 
-    synchronized void generate(EventGenerator eventGenerator) {
+    void generate(EventGenerator eventGenerator) {
+        long lockWaitStart = System.nanoTime();
+
+        synchronized (this) {
+            Profiler.record(
+                    Profiler.EventType.STATE_LOCK_WAIT,
+                    (System.nanoTime() - lockWaitStart) / 1_000_000.0
+            );
+
+            generateLocked(eventGenerator);
+        }
+    }
+
+    private void generateLocked(EventGenerator eventGenerator) {
         // For now generation and rendering share this object under one monitor.
         // Later this can become a published immutable frame or double buffer.
         if (scrollMode == ScrollMode.SHIFT_COPY) {
@@ -117,27 +129,30 @@ final class MarketViewState {
     }
 
     private void applyEvents(EventGenerator eventGenerator) {
-        int tickTradedVolume = 0;
-        int tickDelta = 0;
-        List<BookEvent> events = eventGenerator.nextColumnEvents(eventsPerTick);
+        final int[] tradedVolume = {0};
+        final int[] delta = {0};
+        final long[] count = {0};
 
-        for (BookEvent event : events) {
-            orderBook.apply(event);
+        Profiler.measure(Profiler.EventType.ORDERBOOK_APPLY, () -> {
+            eventGenerator.generateColumnEvents(eventsPerTick, (timestampNanos, side, price, volume, type) -> {
+                orderBook.apply(side, price, volume, type);
 
-            lastTimestampMicros = event.timestampNanos() / 1_000L;
-            totalEvents++;
+                lastTimestampMicros = timestampNanos / 1_000L;
+                count[0]++;
 
-            if (event.type() == EventType.TRADE) {
-                referencePrice = event.price();
-                totalTradedVolume += event.volume();
-                tickTradedVolume += event.volume();
-                tickDelta += event.side() == Side.ASK ? event.volume() : -event.volume();
-            }
-        }
+                if (type == EventType.TRADE) {
+                    referencePrice = price;
+                    totalTradedVolume += volume;
+                    tradedVolume[0] += volume;
+                    delta[0] += side == Side.ASK ? volume : -volume;
+                }
+            });
+        });
 
-        lastTickTradedVolume = tickTradedVolume;
-        lastTickDelta = tickDelta;
-        cumulativeDelta += tickDelta;
+        totalEvents += count[0];
+        lastTickTradedVolume = tradedVolume[0];
+        lastTickDelta = delta[0];
+        cumulativeDelta += delta[0];
     }
 
     private void writeColumn(int column) {
