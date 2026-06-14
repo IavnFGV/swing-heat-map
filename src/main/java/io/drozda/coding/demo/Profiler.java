@@ -24,9 +24,23 @@ public class Profiler {
         return metrics.get(name);
     }
 
+    public static String report() {
+        StringBuilder sb = new StringBuilder();
+        for (Map.Entry<EventType, Double> entry : metrics.entrySet()) {
+            sb.append('\n');
+            sb.append(entry.getKey());
+            sb.append(": ");
+            sb.append(entry.getValue());
+        }
+        sb.append("\n");
+
+        return sb.toString();
+    }
+
     public enum EventType {
         APPLY_EVENTS,
         GEN_DATA,
-        PAINT
+        PAINT,
+        SCROLL_COPY
     }
 }

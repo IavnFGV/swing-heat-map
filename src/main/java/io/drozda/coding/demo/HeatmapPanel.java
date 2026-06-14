@@ -4,8 +4,6 @@ import javax.swing.*;
 import java.awt.*;
 import java.util.Arrays;
 
-import static io.drozda.coding.demo.Profiler.EventType.*;
-
 public class HeatmapPanel extends JPanel {
 
     private final int[][] heatmap =
@@ -18,6 +16,10 @@ public class HeatmapPanel extends JPanel {
     private final OrderBook orderBook = new OrderBook();
     private final InfoFrame infoFrame;
 
+    private final Object lock = new Object();
+
+    private volatile boolean running = true;
+
     private ScrollMode scrollMode = ScrollMode.SHIFT_COPY;
     private int currentColumn = MarketConfig.TIME_BUCKETS - 1;
 
@@ -29,7 +31,9 @@ public class HeatmapPanel extends JPanel {
 
     private long totalEvents = 0;
     private long totalTradedVolume = 0;
+
     private double lastGenerateMs = 0.0;
+    private double lastPaintMs = 0.0;
 
     public HeatmapPanel(InfoFrame infoFrame) {
         this.infoFrame = infoFrame;
@@ -40,14 +44,29 @@ public class HeatmapPanel extends JPanel {
         setFocusable(true);
         setupKeys();
 
+        startWorkerThread();
+        startUiTimer();
+    }
+
+    private void startWorkerThread() {
+        Thread worker = new Thread(() -> {
+            while (running) {
+                long start = System.nanoTime();
+
+                    generateFakeData();
+
+                lastGenerateMs = (System.nanoTime() - start) / 1_000_000.0;
+            }
+        }, "market-data-worker");
+
+        worker.setDaemon(true);
+        worker.start();
+    }
+
+    private void startUiTimer() {
         Timer timer = new Timer(16, e -> {
-            long start = System.nanoTime();
-
-           Profiler.measure(GEN_DATA,this::generateFakeData);
-
-            lastGenerateMs = (System.nanoTime() - start) / 1_000_000.0;
-
             fpsFrameCount++;
+
             long now = System.nanoTime();
 
             if (now - fpsCounterStart >= 1_000_000_000L) {
@@ -72,66 +91,74 @@ public class HeatmapPanel extends JPanel {
     }
 
     private void generateWithShiftCopy() {
-        for (int y = 0; y < MarketConfig.PRICE_LEVELS; y++) {
-            System.arraycopy(
-                    heatmap[y],
-                    1,
-                    heatmap[y],
-                    0,
-                    MarketConfig.TIME_BUCKETS - 1
-            );
+        Profiler.measure(Profiler.EventType.SCROLL_COPY, () -> {
+            for (int y = 0; y < MarketConfig.PRICE_LEVELS; y++) {
+                System.arraycopy(
+                        heatmap[y],
+                        1,
+                        heatmap[y],
+                        0,
+                        MarketConfig.TIME_BUCKETS - 1
+                );
 
-            heatmap[y][MarketConfig.TIME_BUCKETS - 1] = 0;
-        }
+                heatmap[y][MarketConfig.TIME_BUCKETS - 1] = 0;
+            }
 
-       applyEvents();
+            System.arraycopy(bestBidHistory, 1, bestBidHistory, 0, MarketConfig.TIME_BUCKETS - 1);
+            System.arraycopy(bestAskHistory, 1, bestAskHistory, 0, MarketConfig.TIME_BUCKETS - 1);
+        });
 
-        for (int priceLevel = 0; priceLevel < MarketConfig.PRICE_LEVELS; priceLevel++) {
-            heatmap[priceLevel][MarketConfig.TIME_BUCKETS - 1] =
-                    orderBook.totalVolumeAt(priceLevel);
-        }
+        Profiler.measure(Profiler.EventType.APPLY_EVENTS, this::applyEvents);
 
-        System.arraycopy(bestBidHistory, 1, bestBidHistory, 0, MarketConfig.TIME_BUCKETS - 1);
-        System.arraycopy(bestAskHistory, 1, bestAskHistory, 0, MarketConfig.TIME_BUCKETS - 1);
+        Profiler.measure(Profiler.EventType.GEN_DATA, () -> {
+            for (int priceLevel = 0; priceLevel < MarketConfig.PRICE_LEVELS; priceLevel++) {
+                heatmap[priceLevel][MarketConfig.TIME_BUCKETS - 1] =
+                        orderBook.totalVolumeAt(priceLevel);
+            }
 
-        bestBidHistory[MarketConfig.TIME_BUCKETS - 1] = orderBook.bestBidPrice();
-        bestAskHistory[MarketConfig.TIME_BUCKETS - 1] = orderBook.bestAskPrice();
+            bestBidHistory[MarketConfig.TIME_BUCKETS - 1] = orderBook.bestBidPrice();
+            bestAskHistory[MarketConfig.TIME_BUCKETS - 1] = orderBook.bestAskPrice();
 
-        currentColumn = MarketConfig.TIME_BUCKETS - 1;
+            currentColumn = MarketConfig.TIME_BUCKETS - 1;
+        });
     }
 
     private void generateWithCircularBuffer() {
-        currentColumn = (currentColumn + 1) % MarketConfig.TIME_BUCKETS;
+        Profiler.measure(Profiler.EventType.SCROLL_COPY, () -> {
+            currentColumn = (currentColumn + 1) % MarketConfig.TIME_BUCKETS;
 
-        for (int priceLevel = 0; priceLevel < MarketConfig.PRICE_LEVELS; priceLevel++) {
-            heatmap[priceLevel][currentColumn] = 0;
-        }
+            for (int priceLevel = 0; priceLevel < MarketConfig.PRICE_LEVELS; priceLevel++) {
+                heatmap[priceLevel][currentColumn] = 0;
+            }
 
-       applyEvents();
+            bestBidHistory[currentColumn] = -1;
+            bestAskHistory[currentColumn] = -1;
+        });
 
+        Profiler.measure(Profiler.EventType.APPLY_EVENTS, this::applyEvents);
 
-        for (int priceLevel = 0; priceLevel < MarketConfig.PRICE_LEVELS; priceLevel++) {
-            heatmap[priceLevel][currentColumn] =
-                    orderBook.totalVolumeAt(priceLevel);
-        }
+        Profiler.measure(Profiler.EventType.GEN_DATA, () -> {
+            for (int priceLevel = 0; priceLevel < MarketConfig.PRICE_LEVELS; priceLevel++) {
+                heatmap[priceLevel][currentColumn] =
+                        orderBook.totalVolumeAt(priceLevel);
+            }
 
-        bestBidHistory[currentColumn] = orderBook.bestBidPrice();
-        bestAskHistory[currentColumn] = orderBook.bestAskPrice();
+            bestBidHistory[currentColumn] = orderBook.bestBidPrice();
+            bestAskHistory[currentColumn] = orderBook.bestAskPrice();
+        });
     }
 
     private void applyEvents() {
-        Profiler.measure(APPLY_EVENTS, () -> {
-            for (int i = 0; i < eventsPerTick; i++) {
-                BookEvent event = eventGenerator.nextEvent();
-                orderBook.apply(event);
+        for (int i = 0; i < eventsPerTick; i++) {
+            BookEvent event = eventGenerator.nextEvent();
+            orderBook.apply(event);
 
-                totalEvents++;
+            totalEvents++;
 
-                if (event.type() == io.drozda.coding.demo.EventType.TRADE) {
-                    totalTradedVolume += event.volume();
-                }
+            if (event.type() == EventType.TRADE) {
+                totalTradedVolume += event.volume();
             }
-        });
+        }
     }
 
     private int screenXToBufferColumn(int screenX) {
@@ -142,49 +169,20 @@ public class HeatmapPanel extends JPanel {
         return (currentColumn + 1 + screenX) % MarketConfig.TIME_BUCKETS;
     }
 
-    private void drawPriceHistory(Graphics g, int[] history, Color color, double cellW, double cellH) {
-        g.setColor(color);
-
-        for (int x = 1; x < MarketConfig.TIME_BUCKETS; x++) {
-            int prevColumn = screenXToBufferColumn(x - 1);
-            int currColumn = screenXToBufferColumn(x);
-
-            int prevPrice = history[prevColumn];
-            int currPrice = history[currColumn];
-
-            if (prevPrice == -1 || currPrice == -1) {
-                continue;
-            }
-
-            int prevLevel = MarketConfig.priceToLevel(prevPrice);
-            int currLevel = MarketConfig.priceToLevel(currPrice);
-
-            if (!isValidPriceLevel(prevLevel) || !isValidPriceLevel(currLevel)) {
-                continue;
-            }
-
-            int x1 = (int) ((x - 1) * cellW);
-            int x2 = (int) (x * cellW);
-
-            int y1 = (int) ((MarketConfig.PRICE_LEVELS - 1 - prevLevel) * cellH);
-            int y2 = (int) ((MarketConfig.PRICE_LEVELS - 1 - currLevel) * cellH);
-
-            g.drawLine(x1, y1, x2, y2);
-        }
-    }
-
-    private boolean isValidPriceLevel(int priceLevel) {
-        return priceLevel >= 0 && priceLevel < MarketConfig.PRICE_LEVELS;
-    }
-
     @Override
     protected void paintComponent(Graphics g) {
-        Profiler.measure(PAINT, () -> draw(g));
-    }
+        long paintStart = System.nanoTime();
 
-    private void draw(Graphics g) {
         super.paintComponent(g);
 
+//        synchronized (lock) {
+            drawHeatmap(g);
+//        }
+
+        lastPaintMs = (System.nanoTime() - paintStart) / 1_000_000.0;
+    }
+
+    private void drawHeatmap(Graphics g) {
         int w = getWidth();
         int h = getHeight();
 
@@ -220,6 +218,37 @@ public class HeatmapPanel extends JPanel {
         drawPriceHistory(g, bestAskHistory, Color.RED, cellW, cellH);
     }
 
+    private void drawPriceHistory(Graphics g, int[] history, Color color, double cellW, double cellH) {
+        g.setColor(color);
+
+        for (int x = 1; x < MarketConfig.TIME_BUCKETS; x++) {
+            int prevColumn = screenXToBufferColumn(x - 1);
+            int currColumn = screenXToBufferColumn(x);
+
+            int prevPrice = history[prevColumn];
+            int currPrice = history[currColumn];
+
+            if (prevPrice == -1 || currPrice == -1) {
+                continue;
+            }
+
+            int prevLevel = MarketConfig.priceToLevel(prevPrice);
+            int currLevel = MarketConfig.priceToLevel(currPrice);
+
+            if (!isValidPriceLevel(prevLevel) || !isValidPriceLevel(currLevel)) {
+                continue;
+            }
+
+            int x1 = (int) ((x - 1) * cellW);
+            int x2 = (int) (x * cellW);
+
+            int y1 = (int) ((MarketConfig.PRICE_LEVELS - 1 - prevLevel) * cellH);
+            int y2 = (int) ((MarketConfig.PRICE_LEVELS - 1 - currLevel) * cellH);
+
+            g.drawLine(x1, y1, x2, y2);
+        }
+    }
+
     private void drawMidLine(Graphics g, int width, double cellH) {
         int midPriceLevel = MarketConfig.priceToLevel(MarketConfig.MID_PRICE);
         int midY = (int) ((MarketConfig.PRICE_LEVELS - 1 - midPriceLevel) * cellH);
@@ -229,9 +258,24 @@ public class HeatmapPanel extends JPanel {
         g.drawString("mid: " + MarketConfig.MID_PRICE, 20, midY - 5);
     }
 
+    private boolean isValidPriceLevel(int priceLevel) {
+        return priceLevel >= 0 && priceLevel < MarketConfig.PRICE_LEVELS;
+    }
+
     private void updateDebugInfo() {
-        int bestBid = orderBook.bestBidPrice();
-        int bestAsk = orderBook.bestAskPrice();
+        int bestBid;
+        int bestAsk;
+        int columnSnapshot;
+        long eventsSnapshot;
+        long volumeSnapshot;
+
+//        synchronized (lock) {
+            bestBid = orderBook.bestBidPrice();
+            bestAsk = orderBook.bestAskPrice();
+            columnSnapshot = currentColumn;
+            eventsSnapshot = totalEvents;
+            volumeSnapshot = totalTradedVolume;
+//        }
 
         Runtime runtime = Runtime.getRuntime();
 
@@ -245,6 +289,7 @@ public class HeatmapPanel extends JPanel {
         sb.append("Mode               : ").append(scrollMode).append('\n');
         sb.append("FPS                : ").append(String.format("%.0f", fps)).append('\n');
         sb.append("Generate ms        : ").append(String.format("%.3f", lastGenerateMs)).append('\n');
+        sb.append("Paint ms           : ").append(String.format("%.3f", lastPaintMs)).append('\n');
         sb.append("Memory MB          : ").append(usedMb).append('\n');
 
         sb.append('\n');
@@ -252,8 +297,8 @@ public class HeatmapPanel extends JPanel {
         sb.append("=== LOAD ===\n");
         sb.append("Events/tick        : ").append(eventsPerTick).append('\n');
         sb.append("Approx events/sec  : ").append(eventsPerTick * 60L).append('\n');
-        sb.append("Total events       : ").append(totalEvents).append('\n');
-        sb.append("Total traded volume: ").append(totalTradedVolume).append('\n');
+        sb.append("Total events       : ").append(eventsSnapshot).append('\n');
+        sb.append("Total traded volume: ").append(volumeSnapshot).append('\n');
 
         sb.append('\n');
 
@@ -269,16 +314,14 @@ public class HeatmapPanel extends JPanel {
         sb.append('\n');
 
         sb.append("=== BUFFER ===\n");
-        sb.append("Current column     : ").append(currentColumn).append('\n');
+        sb.append("Current column     : ").append(columnSnapshot).append('\n');
         sb.append("Price levels       : ").append(MarketConfig.PRICE_LEVELS).append('\n');
         sb.append("Time buckets       : ").append(MarketConfig.TIME_BUCKETS).append('\n');
 
         sb.append('\n');
 
         sb.append("=== PROFILER ===\n");
-        sb.append(APPLY_EVENTS.name() + ":").append(Profiler.get(APPLY_EVENTS)).append('\n');
-        sb.append(GEN_DATA.name() + ":").append(Profiler.get(GEN_DATA)).append('\n');
-        sb.append(PAINT.name() + ":").append(Profiler.get(PAINT)).append('\n');
+        sb.append(Profiler.report());
 
         sb.append('\n');
 
