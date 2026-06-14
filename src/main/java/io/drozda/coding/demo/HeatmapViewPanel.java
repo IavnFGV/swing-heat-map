@@ -128,7 +128,7 @@ final class HeatmapViewPanel extends JPanel {
                         MarketConfig.PRICE_LEVELS - 1 - (i * MarketConfig.PRICE_LEVELS / horizontalLines)
                 );
                 g.setColor(BookmapTheme.TEXT);
-                g.drawString(String.valueOf(MarketConfig.levelToPrice(level)), priceAxis.x + 8, y + 4);
+                g.drawString(PriceDisplay.formatInternalPrice(MarketConfig.levelToPrice(level)), priceAxis.x + 8, y + 4);
             }
         }
     }
@@ -188,6 +188,6 @@ final class HeatmapViewPanel extends JPanel {
         g.setStroke(new BasicStroke(1.2f, BasicStroke.CAP_BUTT, BasicStroke.JOIN_MITER, 10f, dash, 0f));
         g.drawLine(plot.x, midY, plot.x + plot.width, midY);
         g.setStroke(oldStroke);
-        g.drawString("ref: " + referencePrice, plot.x + 20, midY - 5);
+        g.drawString("ref: " + PriceDisplay.formatInternalPrice(referencePrice), plot.x + 20, midY - 5);
     }
 }

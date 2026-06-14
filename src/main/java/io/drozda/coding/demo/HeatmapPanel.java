@@ -192,12 +192,12 @@ public class HeatmapPanel extends JPanel {
         sb.append('\n');
 
         sb.append("=== MARKET ===\n");
-        sb.append("Best bid           : ").append(bestBid).append('\n');
-        sb.append("Best ask           : ").append(bestAsk).append('\n');
+        sb.append("Best bid           : ").append(formatPrice(bestBid)).append('\n');
+        sb.append("Best ask           : ").append(formatPrice(bestAsk)).append('\n');
 
         if (bestBid != -1 && bestAsk != -1) {
-            sb.append("Spread             : ").append(bestAsk - bestBid).append('\n');
-            sb.append("Mid                : ").append((bestBid + bestAsk) / 2.0).append('\n');
+            sb.append("Spread ticks       : ").append(bestAsk - bestBid).append('\n');
+            sb.append("Mid                : ").append(formatPrice((bestBid + bestAsk) / 2)).append('\n');
         }
 
         sb.append('\n');
@@ -223,6 +223,14 @@ public class HeatmapPanel extends JPanel {
         sb.append("-  -> decrease load\n");
 
         infoFrame.updateText(sb.toString());
+    }
+
+    private String formatPrice(int price) {
+        if (price == -1) {
+            return "-1";
+        }
+
+        return PriceDisplay.formatInternalPrice(price);
     }
 
     private void setupKeys() {

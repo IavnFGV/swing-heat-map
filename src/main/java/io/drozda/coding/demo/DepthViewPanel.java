@@ -109,7 +109,7 @@ final class DepthViewPanel extends JPanel {
             g.drawLine(0, y, getWidth(), y);
 
             g.setColor(BookmapTheme.MUTED_TEXT);
-            g.drawString(String.valueOf(MarketConfig.levelToPrice(level)), 8, y + 4);
+            g.drawString(PriceDisplay.formatInternalPrice(MarketConfig.levelToPrice(level)), 8, y + 4);
             g.setColor(BookmapTheme.BID);
             g.drawString(String.valueOf(bidVolume), 54, y + 4);
             g.setColor(BookmapTheme.ASK);

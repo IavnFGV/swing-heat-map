@@ -141,6 +141,7 @@ public class HistoricalTradeBookGenerator extends EventGenerator {
     private void enqueueSyntheticBookReaction(AggTrade trade) {
         if (Double.isNaN(baseRealPrice)) {
             baseRealPrice = trade.price();
+            PriceDisplay.configureRealPrices(baseRealPrice, PRICE_TICK);
         }
 
         lastTimestampMicros = trade.timestampMicros();
