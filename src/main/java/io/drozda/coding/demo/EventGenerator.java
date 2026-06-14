@@ -4,16 +4,16 @@ import java.util.Random;
 
 public class EventGenerator {
 
-    private static final int MID_PRICE = 1000;
     private final Random random = new Random();
 
     public BookEvent nextEvent() {
         Side side = random.nextBoolean() ? Side.BID : Side.ASK;
 
-        int distanceFromMid = random.nextInt(50);
+        int distanceFromMid = random.nextInt(MarketConfig.PRICE_LEVELS / 4);
+
         int price = side == Side.BID
-                ? MID_PRICE - distanceFromMid
-                : MID_PRICE + distanceFromMid;
+                ? MarketConfig.MID_PRICE - distanceFromMid
+                : MarketConfig.MID_PRICE + distanceFromMid;
 
         EventType type = switch (random.nextInt(3)) {
             case 0 -> EventType.ADD;
