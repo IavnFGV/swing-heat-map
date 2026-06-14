@@ -58,34 +58,67 @@ final class HeatmapViewPanel extends JPanel {
         g.setColor(new Color(10, 22, 26));
         g.fillRect(plot.x, plot.y, plot.width, plot.height);
 
-        // All panels use the same state and the same PriceScale. That is what keeps
-        // the heatmap price axis and the right-side depth ladder vertically aligned.
-        synchronized (state) {
-            drawHeatmap(g, plot);
-            drawGrid(g, plot, priceAxis);
-            drawMidLine(g, plot);
-            drawPriceHistory(g, state.bestBidHistory, BookmapTheme.BID, plot);
-            drawPriceHistory(g, state.bestAskHistory, BookmapTheme.ASK, plot);
-        }
+        // Copy the visible state quickly, then release the market lock before
+        // doing expensive Swing drawing. This is the first step toward a proper
+        // published render frame / double-buffer model.
+        HeatmapSnapshot snapshot = snapshot(plot);
+
+        drawHeatmap(g, plot, snapshot);
+        drawGrid(g, plot, priceAxis, snapshot);
+        drawMidLine(g, plot, snapshot);
+        drawPriceHistory(g, snapshot.bestBidPrices, BookmapTheme.BID, plot);
+        drawPriceHistory(g, snapshot.bestAskPrices, BookmapTheme.ASK, plot);
     }
 
-    private void drawHeatmap(Graphics2D g, Rectangle plot) {
+    private HeatmapSnapshot snapshot(Rectangle plot) {
+        HeatmapSnapshot snapshot = new HeatmapSnapshot(plot.width, plot.height);
+
+        synchronized (state) {
+            snapshot.referencePrice = state.referencePrice();
+
+            for (int screenY = 0; screenY < plot.height; screenY++) {
+                int priceLevel = PriceScale.clampLevel(
+                        MarketConfig.PRICE_LEVELS - 1
+                                - (int) (screenY * (MarketConfig.PRICE_LEVELS / (double) plot.height))
+                );
+
+                for (int screenX = 0; screenX < plot.width; screenX++) {
+                    int bufferColumn = state.visibleScreenXToBufferColumn(screenX, plot.width);
+                    if (bufferColumn == -1) {
+                        continue;
+                    }
+
+                    snapshot.volumes[screenY * plot.width + screenX] = state.heatmap[priceLevel][bufferColumn];
+                }
+            }
+
+            for (int x = 0; x < plot.width; x++) {
+                int column = state.visibleScreenXToBufferColumn(x, plot.width);
+                if (column == -1) {
+                    snapshot.bestBidPrices[x] = -1;
+                    snapshot.bestAskPrices[x] = -1;
+                } else {
+                    snapshot.bestBidPrices[x] = state.bestBidHistory[column];
+                    snapshot.bestAskPrices[x] = state.bestAskHistory[column];
+                }
+            }
+
+            for (int i = 0; i <= HeatmapSnapshot.GRID_LINES; i++) {
+                int x = i * plot.width / HeatmapSnapshot.GRID_LINES;
+                snapshot.gridTimestamps[i] = state.visibleTimestampMicros(x, plot.width);
+            }
+        }
+
+        return snapshot;
+    }
+
+    private void drawHeatmap(Graphics2D g, Rectangle plot, HeatmapSnapshot snapshot) {
         // Paint by visible pixels instead of by the full data matrix.
         // With 2_000 x 5_000 buckets the raw matrix has 10M cells; the panel
         // usually has far fewer pixels than that.
         for (int screenY = 0; screenY < plot.height; screenY++) {
-            int priceLevel = PriceScale.clampLevel(
-                    MarketConfig.PRICE_LEVELS - 1
-                            - (int) (screenY * (MarketConfig.PRICE_LEVELS / (double) plot.height))
-            );
-
             for (int screenX = 0; screenX < plot.width; screenX++) {
-                int bufferColumn = state.visibleScreenXToBufferColumn(screenX, plot.width);
-                if (bufferColumn == -1) {
-                    continue;
-                }
-
-                int volume = state.heatmap[priceLevel][bufferColumn];
+                int volume = snapshot.volumes[screenY * plot.width + screenX];
 
                 if (volume == 0) {
                     continue;
@@ -97,12 +130,12 @@ final class HeatmapViewPanel extends JPanel {
         }
     }
 
-    private void drawGrid(Graphics2D g, Rectangle plot, Rectangle priceAxis) {
+    private void drawGrid(Graphics2D g, Rectangle plot, Rectangle priceAxis, HeatmapSnapshot snapshot) {
         g.setColor(BookmapTheme.AXIS_BACKGROUND);
         g.fillRect(priceAxis.x, priceAxis.y, priceAxis.width, priceAxis.height);
         g.setFont(getFont().deriveFont(Font.PLAIN, 11f));
 
-        int verticalLines = 10;
+        int verticalLines = HeatmapSnapshot.GRID_LINES;
         for (int i = 0; i <= verticalLines; i++) {
             int x = plot.x + (int) (plot.width * (i / (double) verticalLines));
             boolean major = i % 2 == 0;
@@ -110,7 +143,7 @@ final class HeatmapViewPanel extends JPanel {
             g.drawLine(x, plot.y, x, plot.y + plot.height);
 
             if (major) {
-                long timestampMicros = state.visibleTimestampMicros(i * plot.width / verticalLines, plot.width);
+                long timestampMicros = snapshot.gridTimestamps[i];
                 g.setColor(BookmapTheme.MUTED_TEXT);
                 g.drawString(formatTimeLabel(timestampMicros), x + 4, plot.y + plot.height - 8);
             }
@@ -143,20 +176,13 @@ final class HeatmapViewPanel extends JPanel {
         return "--:--:--";
     }
 
-    private void drawPriceHistory(Graphics2D g, int[] history, Color color, Rectangle plot) {
+    private void drawPriceHistory(Graphics2D g, int[] visiblePrices, Color color, Rectangle plot) {
         g.setColor(color);
         g.setStroke(new BasicStroke(1.6f));
 
         for (int x = 1; x < plot.width; x++) {
-            int prevColumn = state.visibleScreenXToBufferColumn(x - 1, plot.width);
-            int currColumn = state.visibleScreenXToBufferColumn(x, plot.width);
-
-            if (prevColumn == -1 || currColumn == -1) {
-                continue;
-            }
-
-            int prevPrice = history[prevColumn];
-            int currPrice = history[currColumn];
+            int prevPrice = visiblePrices[x - 1];
+            int currPrice = visiblePrices[x];
 
             if (prevPrice == -1 || currPrice == -1) {
                 continue;
@@ -178,8 +204,8 @@ final class HeatmapViewPanel extends JPanel {
         }
     }
 
-    private void drawMidLine(Graphics2D g, Rectangle plot) {
-        int referencePrice = state.referencePrice();
+    private void drawMidLine(Graphics2D g, Rectangle plot, HeatmapSnapshot snapshot) {
+        int referencePrice = snapshot.referencePrice;
         int midY = plot.y + PriceScale.priceToY(referencePrice, plot.height);
 
         float[] dash = {8f, 8f};
@@ -189,5 +215,21 @@ final class HeatmapViewPanel extends JPanel {
         g.drawLine(plot.x, midY, plot.x + plot.width, midY);
         g.setStroke(oldStroke);
         g.drawString("ref: " + PriceDisplay.formatInternalPrice(referencePrice), plot.x + 20, midY - 5);
+    }
+
+    private static final class HeatmapSnapshot {
+        static final int GRID_LINES = 10;
+
+        final int[] volumes;
+        final int[] bestBidPrices;
+        final int[] bestAskPrices;
+        final long[] gridTimestamps = new long[GRID_LINES + 1];
+        int referencePrice;
+
+        HeatmapSnapshot(int width, int height) {
+            volumes = new int[Math.max(0, width * height)];
+            bestBidPrices = new int[Math.max(0, width)];
+            bestAskPrices = new int[Math.max(0, width)];
+        }
     }
 }

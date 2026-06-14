@@ -58,24 +58,38 @@ final class ActivityViewPanel extends JPanel {
             g.drawLine(volumePlot.x, y, volumePlot.x + volumePlot.width, y);
         }
 
-        synchronized (state) {
-            drawVolumeBars(g, volumePlot);
-            drawZeroLine(g, volumePlot);
-            drawDeltaBars(g, volumePlot);
-            drawCvdLine(g, cvdPlot);
-        }
+        ActivitySnapshot snapshot = snapshot(plot.width);
+
+        drawVolumeBars(g, volumePlot, snapshot);
+        drawZeroLine(g, volumePlot);
+        drawDeltaBars(g, volumePlot, snapshot);
+        drawCvdLine(g, cvdPlot, snapshot);
     }
 
-    private void drawVolumeBars(Graphics2D g, Rectangle plot) {
+    private ActivitySnapshot snapshot(int width) {
+        ActivitySnapshot snapshot = new ActivitySnapshot(width);
+
+        synchronized (state) {
+            for (int x = 0; x < width; x++) {
+                snapshot.volume[x] = state.visibleTradeVolumeBucket(x, width);
+                snapshot.delta[x] = state.visibleTradeDeltaBucket(x, width);
+                snapshot.cvd[x] = state.visibleCvd(x, width);
+            }
+        }
+
+        return snapshot;
+    }
+
+    private void drawVolumeBars(Graphics2D g, Rectangle plot, ActivitySnapshot snapshot) {
         int max = 1;
         for (int screenX = 0; screenX < plot.width; screenX++) {
-            max = Math.max(max, state.visibleTradeVolumeBucket(screenX, plot.width));
+            max = Math.max(max, snapshot.volume[screenX]);
         }
 
         double logMax = Math.log1p(max);
 
         for (int screenX = 0; screenX < plot.width; screenX++) {
-            int volume = state.visibleTradeVolumeBucket(screenX, plot.width);
+            int volume = snapshot.volume[screenX];
             if (volume == 0) {
                 continue;
             }
@@ -97,17 +111,17 @@ final class ActivityViewPanel extends JPanel {
         g.drawLine(plot.x, zeroY, plot.x + plot.width, zeroY);
     }
 
-    private void drawDeltaBars(Graphics2D g, Rectangle plot) {
+    private void drawDeltaBars(Graphics2D g, Rectangle plot, ActivitySnapshot snapshot) {
         int maxAbsDelta = 1;
         for (int screenX = 0; screenX < plot.width; screenX++) {
-            maxAbsDelta = Math.max(maxAbsDelta, Math.abs(state.visibleTradeDeltaBucket(screenX, plot.width)));
+            maxAbsDelta = Math.max(maxAbsDelta, Math.abs(snapshot.delta[screenX]));
         }
 
         int zeroY = plot.y + plot.height / 2;
         int maxH = Math.max(1, plot.height / 3);
 
         for (int screenX = 0; screenX < plot.width; screenX++) {
-            int delta = state.visibleTradeDeltaBucket(screenX, plot.width);
+            int delta = snapshot.delta[screenX];
             if (delta == 0) {
                 continue;
             }
@@ -125,12 +139,12 @@ final class ActivityViewPanel extends JPanel {
         }
     }
 
-    private void drawCvdLine(Graphics2D g, Rectangle plot) {
+    private void drawCvdLine(Graphics2D g, Rectangle plot, ActivitySnapshot snapshot) {
         long min = Long.MAX_VALUE;
         long max = Long.MIN_VALUE;
 
         for (int screenX = 0; screenX < plot.width; screenX++) {
-            long cvd = state.visibleCvd(screenX, plot.width);
+            long cvd = snapshot.cvd[screenX];
             min = Math.min(min, cvd);
             max = Math.max(max, cvd);
         }
@@ -139,18 +153,18 @@ final class ActivityViewPanel extends JPanel {
             return;
         }
 
-        drawCvdAxis(g, plot, min, max);
+        drawCvdAxis(g, plot, min, max, snapshot);
 
         Stroke oldStroke = g.getStroke();
         g.setStroke(new BasicStroke(1.6f));
         g.setColor(BookmapTheme.TEXT);
 
         int prevX = plot.x;
-        int prevY = cvdToY(state.visibleCvd(0, plot.width), min, max, plot);
+        int prevY = cvdToY(snapshot.cvd[0], min, max, plot);
 
         for (int screenX = 1; screenX < plot.width; screenX++) {
             int x = plot.x + screenX;
-            int y = cvdToY(state.visibleCvd(screenX, plot.width), min, max, plot);
+            int y = cvdToY(snapshot.cvd[screenX], min, max, plot);
             g.drawLine(prevX, prevY, x, y);
             prevX = x;
             prevY = y;
@@ -159,7 +173,7 @@ final class ActivityViewPanel extends JPanel {
         g.setStroke(oldStroke);
     }
 
-    private void drawCvdAxis(Graphics2D g, Rectangle plot, long min, long max) {
+    private void drawCvdAxis(Graphics2D g, Rectangle plot, long min, long max, ActivitySnapshot snapshot) {
         g.setFont(getFont().deriveFont(Font.PLAIN, 10f));
         g.setColor(BookmapTheme.MUTED_TEXT);
         g.drawString(formatSigned(max), plot.x + plot.width - 52, plot.y + 10);
@@ -173,7 +187,7 @@ final class ActivityViewPanel extends JPanel {
             g.drawString("0", plot.x + plot.width - 52, zeroY - 2);
         }
 
-        long last = state.visibleCvd(plot.width - 1, plot.width);
+        long last = snapshot.cvd[plot.width - 1];
         int lastY = cvdToY(last, min, max, plot);
         g.setColor(BookmapTheme.TEXT);
         g.drawString(formatSigned(last), plot.x + 42, lastY - 2);
@@ -192,5 +206,17 @@ final class ActivityViewPanel extends JPanel {
     private int cvdToY(long cvd, long min, long max, Rectangle plot) {
         double t = (cvd - min) / (double) (max - min);
         return plot.y + plot.height - 1 - (int) (t * (plot.height - 1));
+    }
+
+    private static final class ActivitySnapshot {
+        final int[] volume;
+        final int[] delta;
+        final long[] cvd;
+
+        ActivitySnapshot(int width) {
+            volume = new int[Math.max(0, width)];
+            delta = new int[Math.max(0, width)];
+            cvd = new long[Math.max(0, width)];
+        }
     }
 }

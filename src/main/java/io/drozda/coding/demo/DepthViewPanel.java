@@ -40,37 +40,50 @@ final class DepthViewPanel extends JPanel {
         g.setColor(BookmapTheme.PANEL_BACKGROUND);
         g.fillRect(0, 0, getWidth(), getHeight());
 
-        // This panel is synchronized with the heatmap by using the same price -> y
-        // conversion. A price level drawn at y=120 here is the same y=120 there.
-        synchronized (state) {
-            int maxVisibleVolume = maxVisibleVolume();
+        // Copy current depth quickly, then draw without holding the market lock.
+        DepthSnapshot snapshot = snapshot();
+        int maxVisibleVolume = maxVisibleVolume(snapshot);
 
-            for (int level = 0; level < MarketConfig.PRICE_LEVELS; level++) {
-                int y = PriceScale.levelToY(level, getHeight());
-                int nextY = PriceScale.levelToY(level - 1, getHeight());
-                int rowH = Math.max(1, nextY - y);
-                int price = MarketConfig.levelToPrice(level);
-                int bidVolume = state.bidVolumeAt(level);
-                int askVolume = state.askVolumeAt(level);
+        for (int level = 0; level < MarketConfig.PRICE_LEVELS; level++) {
+            int y = PriceScale.levelToY(level, getHeight());
+            int nextY = PriceScale.levelToY(level - 1, getHeight());
+            int rowH = Math.max(1, nextY - y);
+            int price = MarketConfig.levelToPrice(level);
+            int bidVolume = snapshot.bidVolumes[level];
+            int askVolume = snapshot.askVolumes[level];
 
-                if (price == state.referencePrice()) {
-                    g.setColor(new Color(70, 98, 104));
-                    g.fillRect(0, y, getWidth(), rowH);
-                }
-
-                int bidW = (int) ((getWidth() * MAX_BAR_WIDTH_RATIO) * (bidVolume / (double) maxVisibleVolume));
-                int askW = (int) ((getWidth() * MAX_BAR_WIDTH_RATIO) * (askVolume / (double) maxVisibleVolume));
-
-                g.setColor(new Color(53, 191, 111, 160));
-                g.fillRect(0, y, bidW, rowH);
-                g.setColor(new Color(207, 60, 72, 160));
-                g.fillRect(getWidth() - askW, y, askW, rowH);
+            if (price == snapshot.referencePrice) {
+                g.setColor(new Color(70, 98, 104));
+                g.fillRect(0, y, getWidth(), rowH);
             }
 
-            drawPriceLabels(g);
+            int bidW = (int) ((getWidth() * MAX_BAR_WIDTH_RATIO) * (bidVolume / (double) maxVisibleVolume));
+            int askW = (int) ((getWidth() * MAX_BAR_WIDTH_RATIO) * (askVolume / (double) maxVisibleVolume));
+
+            g.setColor(new Color(53, 191, 111, 160));
+            g.fillRect(0, y, bidW, rowH);
+            g.setColor(new Color(207, 60, 72, 160));
+            g.fillRect(getWidth() - askW, y, askW, rowH);
         }
 
+        drawPriceLabels(g, snapshot);
+
         drawHeader(g);
+    }
+
+    private DepthSnapshot snapshot() {
+        DepthSnapshot snapshot = new DepthSnapshot();
+
+        synchronized (state) {
+            snapshot.referencePrice = state.referencePrice();
+
+            for (int level = 0; level < MarketConfig.PRICE_LEVELS; level++) {
+                snapshot.bidVolumes[level] = state.bidVolumeAt(level);
+                snapshot.askVolumes[level] = state.askVolumeAt(level);
+            }
+        }
+
+        return snapshot;
     }
 
     private void drawHeader(Graphics2D g) {
@@ -83,17 +96,17 @@ final class DepthViewPanel extends JPanel {
         g.drawString("ASK", 108, 22);
     }
 
-    private int maxVisibleVolume() {
+    private int maxVisibleVolume(DepthSnapshot snapshot) {
         int maxVisibleVolume = 1;
 
         for (int level = 0; level < MarketConfig.PRICE_LEVELS; level++) {
-            maxVisibleVolume = Math.max(maxVisibleVolume, state.totalVolumeAt(level));
+            maxVisibleVolume = Math.max(maxVisibleVolume, snapshot.bidVolumes[level] + snapshot.askVolumes[level]);
         }
 
         return maxVisibleVolume;
     }
 
-    private void drawPriceLabels(Graphics2D g) {
+    private void drawPriceLabels(Graphics2D g, DepthSnapshot snapshot) {
         g.setFont(getFont().deriveFont(Font.PLAIN, 11f));
 
         int horizontalLines = 12;
@@ -102,8 +115,8 @@ final class DepthViewPanel extends JPanel {
                     MarketConfig.PRICE_LEVELS - 1 - (i * MarketConfig.PRICE_LEVELS / horizontalLines)
             );
             int y = PriceScale.levelToY(level, getHeight());
-            int bidVolume = state.bidVolumeAt(level);
-            int askVolume = state.askVolumeAt(level);
+            int bidVolume = snapshot.bidVolumes[level];
+            int askVolume = snapshot.askVolumes[level];
 
             g.setColor(BookmapTheme.GRID_MINOR);
             g.drawLine(0, y, getWidth(), y);
@@ -115,5 +128,11 @@ final class DepthViewPanel extends JPanel {
             g.setColor(BookmapTheme.ASK);
             g.drawString(String.valueOf(askVolume), 108, y + 4);
         }
+    }
+
+    private static final class DepthSnapshot {
+        final int[] bidVolumes = new int[MarketConfig.PRICE_LEVELS];
+        final int[] askVolumes = new int[MarketConfig.PRICE_LEVELS];
+        int referencePrice;
     }
 }
