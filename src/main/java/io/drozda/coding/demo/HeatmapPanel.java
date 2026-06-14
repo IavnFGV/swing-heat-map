@@ -87,5 +87,20 @@ public class HeatmapPanel extends JPanel {
         g.drawString("Synthetic liquidity heatmap", 20, 30);
         g.drawString("Events/tick: " + MarketConfig.EVENTS_PER_TICK, 20, 50);
         g.drawString("Approx events/sec: " + (MarketConfig.EVENTS_PER_TICK * 60), 20, 70);
+
+        int bestBid = orderBook.bestBidPrice();
+        int bestAsk = orderBook.bestAskPrice();
+
+        g.drawString("Best bid: " + bestBid, 20, 90);
+        g.drawString("Best ask: " + bestAsk, 20, 110);
+
+        if (bestBid != -1 && bestAsk != -1) {
+            g.drawString("Spread: " + (bestAsk - bestBid), 20, 130);
+        }
+        g.drawString(
+                "Mid: " + ((bestBid + bestAsk) / 2.0),
+                20,
+                150
+        );
     }
 }

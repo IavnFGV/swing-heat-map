@@ -23,4 +23,22 @@ public class OrderBook {
     public int totalVolumeAt(int priceLevel) {
         return bidVolumes[priceLevel] + askVolumes[priceLevel];
     }
+
+    public int bestBidPrice() {
+        for (int i = bidVolumes.length - 1; i >= 0; i--) {
+            if (bidVolumes[i] > 0) {
+                return MarketConfig.levelToPrice(i);
+            }
+        }
+        return -1;
+    }
+
+    public int bestAskPrice() {
+        for (int i = 0; i < askVolumes.length; i++) {
+            if (askVolumes[i] > 0) {
+                return MarketConfig.levelToPrice(i);
+            }
+        }
+        return -1;
+    }
 }
