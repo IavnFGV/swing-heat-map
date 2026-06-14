@@ -2,14 +2,12 @@ package io.drozda.coding.demo;
 
 import javax.swing.*;
 import java.awt.*;
-import java.util.Random;
 
 public class HeatmapPanel extends JPanel {
 
-    private static final int PRICE_LEVELS = 200;
-    private static final int TIME_BUCKETS = 800;
+    private final int[][] heatmap =
+            new int[MarketConfig.PRICE_LEVELS][MarketConfig.TIME_BUCKETS];
 
-    private final int[][] heatmap = new int[PRICE_LEVELS][TIME_BUCKETS];
     private final EventGenerator eventGenerator = new EventGenerator();
     private final OrderBook orderBook = new OrderBook();
 
@@ -22,21 +20,27 @@ public class HeatmapPanel extends JPanel {
     }
 
     private void generateFakeData() {
-        // shift left
-        for (int y = 0; y < PRICE_LEVELS; y++) {
-            System.arraycopy(heatmap[y], 1, heatmap[y], 0, TIME_BUCKETS - 1);
-            heatmap[y][TIME_BUCKETS - 1] = 0;
+        for (int y = 0; y < MarketConfig.PRICE_LEVELS; y++) {
+            System.arraycopy(
+                    heatmap[y],
+                    1,
+                    heatmap[y],
+                    0,
+                    MarketConfig.TIME_BUCKETS - 1
+            );
+
+            heatmap[y][MarketConfig.TIME_BUCKETS - 1] = 0;
         }
 
-        for (int i = 0; i < 1000; i++) {
+        for (int i = 0; i < MarketConfig.EVENTS_PER_TICK; i++) {
             BookEvent event = eventGenerator.nextEvent();
             orderBook.apply(event);
         }
 
-        for (int priceLevel = 0; priceLevel < PRICE_LEVELS; priceLevel++) {
-            heatmap[priceLevel][TIME_BUCKETS - 1] = orderBook.totalVolumeAt(priceLevel);
+        for (int priceLevel = 0; priceLevel < MarketConfig.PRICE_LEVELS; priceLevel++) {
+            heatmap[priceLevel][MarketConfig.TIME_BUCKETS - 1] =
+                    orderBook.totalVolumeAt(priceLevel);
         }
-
     }
 
     @Override
@@ -46,11 +50,11 @@ public class HeatmapPanel extends JPanel {
         int w = getWidth();
         int h = getHeight();
 
-        double cellW = w / (double) TIME_BUCKETS;
-        double cellH = h / (double) PRICE_LEVELS;
+        double cellW = w / (double) MarketConfig.TIME_BUCKETS;
+        double cellH = h / (double) MarketConfig.PRICE_LEVELS;
 
-        for (int y = 0; y < PRICE_LEVELS; y++) {
-            for (int x = 0; x < TIME_BUCKETS; x++) {
+        for (int y = 0; y < MarketConfig.PRICE_LEVELS; y++) {
+            for (int x = 0; x < MarketConfig.TIME_BUCKETS; x++) {
                 int volume = heatmap[y][x];
 
                 if (volume == 0) {
@@ -61,13 +65,27 @@ public class HeatmapPanel extends JPanel {
                 g.setColor(new Color(intensity, intensity / 2, 0));
 
                 int px = (int) (x * cellW);
-                int py = (int) ((PRICE_LEVELS - 1 - y) * cellH);
+                int py = (int) ((MarketConfig.PRICE_LEVELS - 1 - y) * cellH);
 
-                g.fillRect(px, py, Math.max(1, (int) cellW + 1), Math.max(1, (int) cellH + 1));
+                g.fillRect(
+                        px,
+                        py,
+                        Math.max(1, (int) cellW + 1),
+                        Math.max(1, (int) cellH + 1)
+                );
             }
         }
 
+        int midPriceLevel = MarketConfig.priceToLevel(MarketConfig.MID_PRICE);
+        int midY = (int) ((MarketConfig.PRICE_LEVELS - 1 - midPriceLevel) * cellH);
+
+        g.setColor(Color.CYAN);
+        g.drawLine(0, midY, w, midY);
+        g.drawString("mid: " + MarketConfig.MID_PRICE, 20, midY - 5);
+
         g.setColor(Color.BLACK);
         g.drawString("Synthetic liquidity heatmap", 20, 30);
+        g.drawString("Events/tick: " + MarketConfig.EVENTS_PER_TICK, 20, 50);
+        g.drawString("Approx events/sec: " + (MarketConfig.EVENTS_PER_TICK * 60), 20, 70);
     }
 }
