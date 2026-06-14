@@ -8,6 +8,9 @@ public class HeatmapPanel extends JPanel {
     private final int[][] heatmap =
             new int[MarketConfig.PRICE_LEVELS][MarketConfig.TIME_BUCKETS];
 
+    private final int[] bestBidHistory = new int[MarketConfig.TIME_BUCKETS];
+    private final int[] bestAskHistory = new int[MarketConfig.TIME_BUCKETS];
+
     private final EventGenerator eventGenerator = new EventGenerator();
     private final OrderBook orderBook = new OrderBook();
 
@@ -40,6 +43,37 @@ public class HeatmapPanel extends JPanel {
         for (int priceLevel = 0; priceLevel < MarketConfig.PRICE_LEVELS; priceLevel++) {
             heatmap[priceLevel][MarketConfig.TIME_BUCKETS - 1] =
                     orderBook.totalVolumeAt(priceLevel);
+        }
+
+        System.arraycopy(bestBidHistory, 1, bestBidHistory, 0, MarketConfig.TIME_BUCKETS - 1);
+        System.arraycopy(bestAskHistory, 1, bestAskHistory, 0, MarketConfig.TIME_BUCKETS - 1);
+
+        bestBidHistory[MarketConfig.TIME_BUCKETS - 1] = orderBook.bestBidPrice();
+        bestAskHistory[MarketConfig.TIME_BUCKETS - 1] = orderBook.bestAskPrice();
+
+    }
+
+    private void drawPriceHistory(Graphics g, int[] history, Color color, double cellW, double cellH) {
+        g.setColor(color);
+
+        for (int x = 1; x < MarketConfig.TIME_BUCKETS; x++) {
+            int prevPrice = history[x - 1];
+            int currPrice = history[x];
+
+            if (prevPrice == -1 || currPrice == -1) {
+                continue;
+            }
+
+            int prevLevel = MarketConfig.priceToLevel(prevPrice);
+            int currLevel = MarketConfig.priceToLevel(currPrice);
+
+            int x1 = (int) ((x - 1) * cellW);
+            int x2 = (int) (x * cellW);
+
+            int y1 = (int) ((MarketConfig.PRICE_LEVELS - 1 - prevLevel) * cellH);
+            int y2 = (int) ((MarketConfig.PRICE_LEVELS - 1 - currLevel) * cellH);
+
+            g.drawLine(x1, y1, x2, y2);
         }
     }
 
@@ -102,5 +136,8 @@ public class HeatmapPanel extends JPanel {
                 20,
                 150
         );
+
+        drawPriceHistory(g, bestBidHistory, Color.BLUE, cellW, cellH);
+        drawPriceHistory(g, bestAskHistory, Color.RED, cellW, cellH);
     }
 }
