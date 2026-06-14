@@ -24,6 +24,14 @@ public class OrderBook {
         return bidVolumes[priceLevel] + askVolumes[priceLevel];
     }
 
+    public int bidVolumeAt(int priceLevel) {
+        return bidVolumes[priceLevel];
+    }
+
+    public int askVolumeAt(int priceLevel) {
+        return askVolumes[priceLevel];
+    }
+
     public int bestBidPrice() {
         for (int i = bidVolumes.length - 1; i >= 0; i--) {
             if (bidVolumes[i] > 0) {
