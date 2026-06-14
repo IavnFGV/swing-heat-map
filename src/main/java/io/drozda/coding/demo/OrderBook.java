@@ -1,5 +1,7 @@
 package io.drozda.coding.demo;
 
+import java.util.Arrays;
+
 public class OrderBook {
     private final int[] bidVolumes = new int[MarketConfig.PRICE_LEVELS];
     private final int[] askVolumes = new int[MarketConfig.PRICE_LEVELS];
@@ -48,5 +50,10 @@ public class OrderBook {
             }
         }
         return -1;
+    }
+
+    public void clear() {
+        Arrays.fill(bidVolumes, 0);
+        Arrays.fill(askVolumes, 0);
     }
 }

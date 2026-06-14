@@ -18,7 +18,6 @@ public class HeatmapPanel extends JPanel {
     private static final int MARKET_TICK_MS = 20;
 
     private final MarketViewState state = new MarketViewState();
-    private final EventGenerator eventGenerator = createEventGenerator();
     private final InfoFrame infoFrame;
 
     private final MarketHeaderPanel headerPanel = new MarketHeaderPanel(state);
@@ -27,6 +26,8 @@ public class HeatmapPanel extends JPanel {
     private final ActivityViewPanel activityViewPanel = new ActivityViewPanel(state);
 
     private volatile boolean running = true;
+    private volatile DataMode dataMode;
+    private volatile EventGenerator eventGenerator;
 
     private long fpsCounterStart = System.nanoTime();
     private long fpsFrameCount = 0;
@@ -34,7 +35,12 @@ public class HeatmapPanel extends JPanel {
 
     private double lastGenerateMs = 0.0;
 
-    private static EventGenerator createEventGenerator() {
+    private static EventGenerator createEventGenerator(DataMode dataMode) {
+        if (dataMode == DataMode.SYNTHETIC_STRESS) {
+            PriceDisplay.clearRealPrices();
+            return new EventGenerator();
+        }
+
         Path csvPath = Path.of("BTCUSDT-aggTrades-2026-06-12.csv");
         if (Files.exists(csvPath)) {
             return new HistoricalTradeBookGenerator(csvPath);
@@ -67,6 +73,10 @@ public class HeatmapPanel extends JPanel {
         add(headerPanel, BorderLayout.NORTH);
         add(content, BorderLayout.CENTER);
 
+        setDataMode(Files.exists(Path.of("BTCUSDT-aggTrades-2026-06-12.csv"))
+                ? DataMode.HISTORICAL_REPLAY
+                : DataMode.SYNTHETIC_STRESS);
+
         setupKeys();
         setupResizeRepaint();
         startWorkerThread();
@@ -89,7 +99,8 @@ public class HeatmapPanel extends JPanel {
             while (running) {
                 long start = System.nanoTime();
 
-                state.generate(eventGenerator);
+                EventGenerator generator = eventGenerator;
+                state.generate(generator);
 
                 lastGenerateMs = (System.nanoTime() - start) / 1_000_000.0;
 
@@ -148,6 +159,7 @@ public class HeatmapPanel extends JPanel {
         ScrollMode scrollMode;
         int timeScaleMs;
         int visibleRangeSeconds;
+        DataMode currentDataMode;
 
         synchronized (state) {
             bestBid = state.bestBidPrice();
@@ -158,6 +170,7 @@ public class HeatmapPanel extends JPanel {
             eventsPerTick = state.eventsPerTick();
             scrollMode = state.scrollMode();
             timeScaleMs = state.timeScaleMs();
+            currentDataMode = state.dataMode();
             visibleRangeSeconds = Math.max(0, (heatmapViewPanel.getWidth() - HeatmapViewPanel.PRICE_AXIS_W)
                     * timeScaleMs / 1_000);
         }
@@ -168,6 +181,7 @@ public class HeatmapPanel extends JPanel {
         StringBuilder sb = new StringBuilder();
 
         sb.append("=== PERFORMANCE ===\n");
+        sb.append("Data mode          : ").append(currentDataMode).append('\n');
         sb.append("Mode               : ").append(scrollMode).append('\n');
         sb.append("FPS                : ").append(String.format("%.0f", fps)).append('\n');
         sb.append("Generate ms        : ").append(String.format("%.3f", lastGenerateMs)).append('\n');
@@ -184,7 +198,7 @@ public class HeatmapPanel extends JPanel {
         sb.append('\n');
 
         sb.append("=== LOAD ===\n");
-        sb.append("Events/tick        : ").append(eventsPerTick).append('\n');
+        sb.append("Events/bucket cap  : ").append(eventsPerTick).append('\n');
         sb.append("Approx events/sec  : ").append(eventsPerTick * 60L).append('\n');
         sb.append("Total events       : ").append(eventsSnapshot).append('\n');
         sb.append("Total traded volume: ").append(volumeSnapshot).append('\n');
@@ -217,6 +231,7 @@ public class HeatmapPanel extends JPanel {
         sb.append("=== KEYS ===\n");
         sb.append("1  -> SHIFT_COPY\n");
         sb.append("2  -> CIRCULAR_BUFFER\n");
+        sb.append("M  -> switch data mode\n");
         sb.append("[  -> zoom out time scale\n");
         sb.append("]  -> zoom in time scale\n");
         sb.append("+  -> increase load\n");
@@ -251,6 +266,15 @@ public class HeatmapPanel extends JPanel {
                 synchronized (state) {
                     state.setScrollMode(ScrollMode.CIRCULAR_BUFFER);
                 }
+            }
+        });
+
+        getInputMap(WHEN_IN_FOCUSED_WINDOW).put(KeyStroke.getKeyStroke('m'), "mode");
+        getInputMap(WHEN_IN_FOCUSED_WINDOW).put(KeyStroke.getKeyStroke('M'), "mode");
+        getActionMap().put("mode", new AbstractAction() {
+            @Override
+            public void actionPerformed(java.awt.event.ActionEvent e) {
+                switchDataMode();
             }
         });
 
@@ -293,5 +317,24 @@ public class HeatmapPanel extends JPanel {
                 }
             }
         });
+    }
+
+    private void switchDataMode() {
+        DataMode nextMode = dataMode == DataMode.HISTORICAL_REPLAY
+                ? DataMode.SYNTHETIC_STRESS
+                : DataMode.HISTORICAL_REPLAY;
+
+        setDataMode(nextMode);
+    }
+
+    private void setDataMode(DataMode nextMode) {
+        eventGenerator = createEventGenerator(nextMode);
+        dataMode = nextMode;
+
+        synchronized (state) {
+            state.reset(nextMode);
+        }
+
+        repaintAllViews();
     }
 }

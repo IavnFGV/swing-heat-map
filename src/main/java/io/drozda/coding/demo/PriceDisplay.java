@@ -14,6 +14,12 @@ final class PriceDisplay {
         realPriceMode = true;
     }
 
+    static void clearRealPrices() {
+        realPriceMode = false;
+        baseRealPrice = 0.0;
+        tickSize = 1.0;
+    }
+
     static String formatInternalPrice(int internalPrice) {
         if (!realPriceMode) {
             return String.valueOf(internalPrice);

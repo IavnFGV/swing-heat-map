@@ -21,6 +21,7 @@ final class MarketViewState {
     private final OrderBook orderBook = new OrderBook();
 
     private ScrollMode scrollMode = ScrollMode.CIRCULAR_BUFFER;
+    private DataMode dataMode = DataMode.HISTORICAL_REPLAY;
     private int currentColumn = MarketConfig.TIME_BUCKETS - 1;
     private int timeScaleIndex = 1;
     private int eventsPerTick = MarketConfig.EVENTS_PER_TICK;
@@ -35,8 +36,33 @@ final class MarketViewState {
     private long totalTradedVolume = 0;
 
     MarketViewState() {
+        reset(DataMode.HISTORICAL_REPLAY);
+    }
+
+    synchronized void reset(DataMode dataMode) {
+        for (int y = 0; y < MarketConfig.PRICE_LEVELS; y++) {
+            Arrays.fill(heatmap[y], 0);
+        }
+
         Arrays.fill(bestBidHistory, -1);
         Arrays.fill(bestAskHistory, -1);
+        Arrays.fill(tradeVolumeHistory, 0);
+        Arrays.fill(tradeDeltaHistory, 0);
+        Arrays.fill(cvdHistory, 0L);
+        Arrays.fill(timestampMicrosHistory, 0L);
+
+        orderBook.clear();
+
+        this.dataMode = dataMode;
+        currentColumn = MarketConfig.TIME_BUCKETS - 1;
+        lastTickTradedVolume = 0;
+        lastTickDelta = 0;
+        cumulativeDelta = 0L;
+        lastTimestampMicros = 0L;
+        latestColumnTimestampMicros = 0L;
+        referencePrice = MarketConfig.MID_PRICE;
+        totalEvents = 0;
+        totalTradedVolume = 0;
     }
 
     synchronized void generate(EventGenerator eventGenerator) {
@@ -286,6 +312,10 @@ final class MarketViewState {
         return eventsPerTick;
     }
 
+    DataMode dataMode() {
+        return dataMode;
+    }
+
     long totalEvents() {
         return totalEvents;
     }
@@ -313,4 +343,5 @@ final class MarketViewState {
     void zoomIn() {
         timeScaleIndex = Math.max(0, timeScaleIndex - 1);
     }
+
 }
