@@ -11,6 +11,7 @@ public class HeatmapPanel extends JPanel {
 
     private final int[][] heatmap = new int[PRICE_LEVELS][TIME_BUCKETS];
     private final EventGenerator eventGenerator = new EventGenerator();
+    private final OrderBook orderBook = new OrderBook();
 
     public HeatmapPanel() {
         Timer timer = new Timer(16, e -> {
@@ -21,29 +22,21 @@ public class HeatmapPanel extends JPanel {
     }
 
     private void generateFakeData() {
-        // 1. Сдвигаем всю картинку влево на 1 колонку
+        // shift left
         for (int y = 0; y < PRICE_LEVELS; y++) {
             System.arraycopy(heatmap[y], 1, heatmap[y], 0, TIME_BUCKETS - 1);
             heatmap[y][TIME_BUCKETS - 1] = 0;
         }
 
-
         for (int i = 0; i < 1000; i++) {
             BookEvent event = eventGenerator.nextEvent();
-
-            int priceLevel = event.price() - 900;
-
-            if (priceLevel >= 0 && priceLevel < PRICE_LEVELS) {
-                if (event.type() == EventType.ADD) {
-                    heatmap[priceLevel][TIME_BUCKETS - 1] += event.volume();
-                } else if (event.type() == EventType.CANCEL || event.type() == EventType.TRADE) {
-                    heatmap[priceLevel][TIME_BUCKETS - 1] -= event.volume();
-                    if (heatmap[priceLevel][TIME_BUCKETS - 1] < 0) {
-                        heatmap[priceLevel][TIME_BUCKETS - 1] = 0;
-                    }
-                }
-            }
+            orderBook.apply(event);
         }
+
+        for (int priceLevel = 0; priceLevel < PRICE_LEVELS; priceLevel++) {
+            heatmap[priceLevel][TIME_BUCKETS - 1] = orderBook.totalVolumeAt(priceLevel);
+        }
+
     }
 
     @Override
