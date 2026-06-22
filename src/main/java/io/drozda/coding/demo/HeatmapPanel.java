@@ -133,6 +133,7 @@ public class HeatmapPanel extends JPanel {
             }
 
             updateDebugInfo();
+            updateRenderViewport();
 
             // repaint() schedules paintComponent() calls on the EDT.
             // The panels render the same MarketViewState, so axes stay in sync.
@@ -140,6 +141,14 @@ public class HeatmapPanel extends JPanel {
         });
 
         timer.start();
+    }
+
+    private void updateRenderViewport() {
+        state.setRenderViewport(
+                Math.max(0, heatmapViewPanel.getWidth() - HeatmapViewPanel.PRICE_AXIS_W),
+                heatmapViewPanel.getHeight(),
+                Math.max(0, activityViewPanel.getWidth() - 16)
+        );
     }
 
     private void repaintAllViews() {

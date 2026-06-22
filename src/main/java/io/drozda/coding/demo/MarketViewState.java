@@ -1,5 +1,7 @@
 package io.drozda.coding.demo;
 
+import java.awt.image.BufferedImage;
+import java.awt.image.DataBufferInt;
 import java.util.Arrays;
 
 final class MarketViewState {
@@ -33,6 +35,10 @@ final class MarketViewState {
 
     private long totalEvents = 0;
     private long totalTradedVolume = 0;
+    private volatile int renderHeatmapWidth = 0;
+    private volatile int renderHeatmapHeight = 0;
+    private volatile int renderActivityWidth = 0;
+    private volatile RenderFrame latestFrame;
 
     MarketViewState() {
         reset(DataMode.HISTORICAL_REPLAY);
@@ -85,6 +91,18 @@ final class MarketViewState {
         } else {
             generateWithCircularBuffer(eventGenerator);
         }
+
+        Profiler.measure(Profiler.EventType.RENDER_FRAME_BUILD, this::buildRenderFrame);
+    }
+
+    void setRenderViewport(int heatmapWidth, int heatmapHeight, int activityWidth) {
+        renderHeatmapWidth = Math.max(0, heatmapWidth);
+        renderHeatmapHeight = Math.max(0, heatmapHeight);
+        renderActivityWidth = Math.max(0, activityWidth);
+    }
+
+    RenderFrame latestFrame() {
+        return latestFrame;
     }
 
     private void generateWithShiftCopy(EventGenerator eventGenerator) {
@@ -170,6 +188,79 @@ final class MarketViewState {
         if (lastTimestampMicros > 0L) {
             latestColumnTimestampMicros = lastTimestampMicros;
         }
+    }
+
+    private void buildRenderFrame() {
+        int heatmapWidth = renderHeatmapWidth;
+        int heatmapHeight = renderHeatmapHeight;
+        int activityWidth = renderActivityWidth;
+
+        if (heatmapWidth <= 0 || heatmapHeight <= 0 || activityWidth <= 0) {
+            return;
+        }
+
+        BufferedImage heatmapImage = new BufferedImage(heatmapWidth, heatmapHeight, BufferedImage.TYPE_INT_RGB);
+        int[] pixels = ((DataBufferInt) heatmapImage.getRaster().getDataBuffer()).getData();
+        int background = BookmapTheme.BACKGROUND.getRGB();
+
+        for (int screenY = 0; screenY < heatmapHeight; screenY++) {
+            int priceLevel = PriceScale.clampLevel(
+                    MarketConfig.PRICE_LEVELS - 1
+                            - (int) (screenY * (MarketConfig.PRICE_LEVELS / (double) heatmapHeight))
+            );
+
+            for (int screenX = 0; screenX < heatmapWidth; screenX++) {
+                int bufferColumn = visibleScreenXToBufferColumn(screenX, heatmapWidth);
+                int volume = bufferColumn == -1 ? 0 : heatmap[priceLevel][bufferColumn];
+                pixels[screenY * heatmapWidth + screenX] = volume == 0
+                        ? background
+                        : BookmapTheme.heatRgb(volume);
+            }
+        }
+
+        int[] bestBidPrices = new int[heatmapWidth];
+        int[] bestAskPrices = new int[heatmapWidth];
+
+        for (int x = 0; x < heatmapWidth; x++) {
+            int column = visibleScreenXToBufferColumn(x, heatmapWidth);
+            if (column == -1) {
+                bestBidPrices[x] = -1;
+                bestAskPrices[x] = -1;
+            } else {
+                bestBidPrices[x] = bestBidHistory[column];
+                bestAskPrices[x] = bestAskHistory[column];
+            }
+        }
+
+        long[] gridTimestamps = new long[11];
+        for (int i = 0; i < gridTimestamps.length; i++) {
+            int x = i * heatmapWidth / (gridTimestamps.length - 1);
+            gridTimestamps[i] = visibleTimestampMicros(x, heatmapWidth);
+        }
+
+        int[] activityVolume = new int[activityWidth];
+        int[] activityDelta = new int[activityWidth];
+        long[] activityCvd = new long[activityWidth];
+
+        for (int x = 0; x < activityWidth; x++) {
+            activityVolume[x] = visibleTradeVolumeBucket(x, activityWidth);
+            activityDelta[x] = visibleTradeDeltaBucket(x, activityWidth);
+            activityCvd[x] = visibleCvd(x, activityWidth);
+        }
+
+        latestFrame = new RenderFrame(
+                heatmapWidth,
+                heatmapHeight,
+                heatmapImage,
+                bestBidPrices,
+                bestAskPrices,
+                gridTimestamps,
+                referencePrice,
+                activityWidth,
+                activityVolume,
+                activityDelta,
+                activityCvd
+        );
     }
 
     int screenXToBufferColumn(int screenX) {

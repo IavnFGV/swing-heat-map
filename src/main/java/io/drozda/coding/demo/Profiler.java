@@ -50,6 +50,7 @@ public class Profiler {
         PAINT,
         HEATMAP_SNAPSHOT,
         HEATMAP_PAINT,
+        RENDER_FRAME_BUILD,
         DEPTH_SNAPSHOT,
         DEPTH_PAINT,
         ACTIVITY_SNAPSHOT,

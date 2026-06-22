@@ -61,6 +61,13 @@ final class HeatmapViewPanel extends JPanel {
         g.setColor(new Color(10, 22, 26));
         g.fillRect(plot.x, plot.y, plot.width, plot.height);
 
+        RenderFrame frame = state.latestFrame();
+        if (frame != null && frame.heatmapWidth == plot.width && frame.heatmapHeight == plot.height) {
+            Profiler.record(Profiler.EventType.HEATMAP_SNAPSHOT, 0.0);
+            Profiler.measure(Profiler.EventType.HEATMAP_PAINT, () -> drawRenderFrame(g, plot, priceAxis, frame));
+            return;
+        }
+
         // Copy the visible state quickly, then release the market lock before
         // doing expensive Swing drawing. This is the first step toward a proper
         // published render frame / double-buffer model.
@@ -69,8 +76,8 @@ final class HeatmapViewPanel extends JPanel {
 
         Profiler.measure(Profiler.EventType.HEATMAP_PAINT, () -> {
             drawHeatmap(g, plot, snapshot[0]);
-            drawGrid(g, plot, priceAxis, snapshot[0]);
-            drawMidLine(g, plot, snapshot[0]);
+            drawGrid(g, plot, priceAxis, snapshot[0].gridTimestamps);
+            drawMidLine(g, plot, snapshot[0].referencePrice);
             drawPriceHistory(g, snapshot[0].bestBidPrices, BookmapTheme.BID, plot);
             drawPriceHistory(g, snapshot[0].bestAskPrices, BookmapTheme.ASK, plot);
         });
@@ -118,6 +125,14 @@ final class HeatmapViewPanel extends JPanel {
         return snapshot;
     }
 
+    private void drawRenderFrame(Graphics2D g, Rectangle plot, Rectangle priceAxis, RenderFrame frame) {
+        g.drawImage(frame.heatmapImage, plot.x, plot.y, null);
+        drawGrid(g, plot, priceAxis, frame.gridTimestamps);
+        drawMidLine(g, plot, frame.referencePrice);
+        drawPriceHistory(g, frame.bestBidPrices, BookmapTheme.BID, plot);
+        drawPriceHistory(g, frame.bestAskPrices, BookmapTheme.ASK, plot);
+    }
+
     private void drawHeatmap(Graphics2D g, Rectangle plot, HeatmapSnapshot snapshot) {
         ensureHeatmapImage(plot.width, plot.height);
 
@@ -143,7 +158,7 @@ final class HeatmapViewPanel extends JPanel {
         }
     }
 
-    private void drawGrid(Graphics2D g, Rectangle plot, Rectangle priceAxis, HeatmapSnapshot snapshot) {
+    private void drawGrid(Graphics2D g, Rectangle plot, Rectangle priceAxis, long[] gridTimestamps) {
         g.setColor(BookmapTheme.AXIS_BACKGROUND);
         g.fillRect(priceAxis.x, priceAxis.y, priceAxis.width, priceAxis.height);
         g.setFont(getFont().deriveFont(Font.PLAIN, 11f));
@@ -156,7 +171,7 @@ final class HeatmapViewPanel extends JPanel {
             g.drawLine(x, plot.y, x, plot.y + plot.height);
 
             if (major) {
-                long timestampMicros = snapshot.gridTimestamps[i];
+                long timestampMicros = gridTimestamps[i];
                 g.setColor(BookmapTheme.MUTED_TEXT);
                 g.drawString(formatTimeLabel(timestampMicros), x + 4, plot.y + plot.height - 8);
             }
@@ -217,8 +232,7 @@ final class HeatmapViewPanel extends JPanel {
         }
     }
 
-    private void drawMidLine(Graphics2D g, Rectangle plot, HeatmapSnapshot snapshot) {
-        int referencePrice = snapshot.referencePrice;
+    private void drawMidLine(Graphics2D g, Rectangle plot, int referencePrice) {
         int midY = plot.y + PriceScale.priceToY(referencePrice, plot.height);
 
         float[] dash = {8f, 8f};

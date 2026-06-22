@@ -58,8 +58,14 @@ final class ActivityViewPanel extends JPanel {
             g.drawLine(volumePlot.x, y, volumePlot.x + volumePlot.width, y);
         }
 
+        ActivitySnapshot frameSnapshot = frameSnapshot(plot.width);
         final ActivitySnapshot[] snapshot = new ActivitySnapshot[1];
-        Profiler.measure(Profiler.EventType.ACTIVITY_SNAPSHOT, () -> snapshot[0] = snapshot(plot.width));
+        if (frameSnapshot != null) {
+            snapshot[0] = frameSnapshot;
+            Profiler.record(Profiler.EventType.ACTIVITY_SNAPSHOT, 0.0);
+        } else {
+            Profiler.measure(Profiler.EventType.ACTIVITY_SNAPSHOT, () -> snapshot[0] = snapshot(plot.width));
+        }
 
         Profiler.measure(Profiler.EventType.ACTIVITY_PAINT, () -> {
             drawVolumeBars(g, volumePlot, snapshot[0]);
@@ -81,6 +87,15 @@ final class ActivityViewPanel extends JPanel {
         }
 
         return snapshot;
+    }
+
+    private ActivitySnapshot frameSnapshot(int width) {
+        RenderFrame frame = state.latestFrame();
+        if (frame == null || frame.activityWidth != width) {
+            return null;
+        }
+
+        return new ActivitySnapshot(frame.activityVolume, frame.activityDelta, frame.activityCvd);
     }
 
     private void drawVolumeBars(Graphics2D g, Rectangle plot, ActivitySnapshot snapshot) {
@@ -220,6 +235,12 @@ final class ActivityViewPanel extends JPanel {
             volume = new int[Math.max(0, width)];
             delta = new int[Math.max(0, width)];
             cvd = new long[Math.max(0, width)];
+        }
+
+        ActivitySnapshot(int[] volume, int[] delta, long[] cvd) {
+            this.volume = volume;
+            this.delta = delta;
+            this.cvd = cvd;
         }
     }
 }
