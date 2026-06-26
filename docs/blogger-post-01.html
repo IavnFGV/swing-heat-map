@@ -1,0 +1,174 @@
+<p>В <a href="https://iavnfgv.blogspot.com/2026/06/swing-10.html" target="_blank">прошлой записи</a> я показал, во что постепенно превратился мой эксперимент с Java Swing.</p>
+
+<p>Теперь сделаем несколько шагов назад — туда, где ещё нет стакана, CVD, исторических данных и небольшого зоопарка внутренних метрик.</p>
+
+<p>Есть один <code>JPanel</code>.</p>
+
+<p>И он уже очень старается.</p>
+
+<h2>Первый рабочий коммит</h2>
+
+<p>Первый рабочий коммит называется честно:</p>
+
+<pre style="background:#f5f5f5;border:1px solid #ddd;overflow:auto;padding:12px;"><code>b0658a5 initial commit - success render with stubs</code></pre>
+
+<p>Никакой ложной скромности. Успешно отрендерили заглушки — сразу фиксируем историческое достижение.</p>
+
+<p>Вся heatmap хранилась в обычной матрице:</p>
+
+<pre style="background:#f5f5f5;border:1px solid #ddd;overflow:auto;padding:12px;"><code>private static final int PRICE_LEVELS = 200;
+private static final int TIME_BUCKETS = 800;
+
+private final int[][] heatmap =
+        new int[PRICE_LEVELS][TIME_BUCKETS];</code></pre>
+
+<p>То есть:</p>
+
+<ul>
+  <li>200 ценовых уровней;</li>
+  <li>800 временных колонок;</li>
+  <li>160 000 ячеек.</li>
+</ul>
+
+<p><strong>[Вставить artifacts/baseline/01-baseline-ui.png]</strong></p>
+
+<h2>Что происходило каждые 100 миллисекунд</h2>
+
+<p>Главный цикл выглядел почти неприлично понятно:</p>
+
+<pre style="background:#f5f5f5;border:1px solid #ddd;overflow:auto;padding:12px;"><code>Timer timer = new Timer(100, e -&gt; {
+    generateFakeData();
+    repaint();
+});</code></pre>
+
+<p>Каждые 100 миллисекунд:</p>
+
+<ol>
+  <li>старые данные сдвигались влево;</li>
+  <li>справа создавалась новая колонка;</li>
+  <li>Swing получал просьбу перерисовать панель.</li>
+</ol>
+
+<p>Слово «просьбу» здесь стоит воспринимать буквально. <code>repaint()</code> не рисует немедленно, а ставит перерисовку в очередь EDT. Swing ещё подумает, когда именно заняться нашими художествами.</p>
+
+<h2>Один маленький сдвиг</h2>
+
+<p>Для добавления новой колонки каждая строка массива сдвигалась на одну позицию:</p>
+
+<pre style="background:#f5f5f5;border:1px solid #ddd;overflow:auto;padding:12px;"><code>for (int y = 0; y &lt; PRICE_LEVELS; y++) {
+    System.arraycopy(
+            heatmap[y],
+            1,
+            heatmap[y],
+            0,
+            TIME_BUCKETS - 1
+    );
+
+    heatmap[y][TIME_BUCKETS - 1] = 0;
+}</code></pre>
+
+<p>Выглядит вполне невинно. Тем более <code>System.arraycopy</code> — не самописный цикл, JVM умеет выполнять его достаточно эффективно.</p>
+
+<p>Но полезно посчитать масштаб:</p>
+
+<pre style="background:#f5f5f5;border:1px solid #ddd;overflow:auto;padding:12px;"><code>200 строк × 799 элементов = 159 800 скопированных int за tick</code></pre>
+
+<p>При интервале 100 мс получается до десяти таких обновлений в секунду:</p>
+
+<pre style="background:#f5f5f5;border:1px solid #ddd;overflow:auto;padding:12px;"><code>примерно 1,6 млн перемещений int в секунду</code></pre>
+
+<p>Это ещё не диагноз. Последовательное копирование примитивов может быть очень быстрым. Но теперь хотя бы понятно, что «добавить одну колонку» физически означает «передвинуть почти всю историю».</p>
+
+<p>Название метода и цена операции иногда живут в разных районах города.</p>
+
+<h2>Затем приходит paintComponent</h2>
+
+<p>После обновления данных <code>paintComponent</code> снова проходил по всей матрице:</p>
+
+<pre style="background:#f5f5f5;border:1px solid #ddd;overflow:auto;padding:12px;"><code>for (int y = 0; y &lt; PRICE_LEVELS; y++) {
+    for (int x = 0; x &lt; TIME_BUCKETS; x++) {
+        int volume = heatmap[y][x];
+
+        if (volume == 0) {
+            continue;
+        }
+
+        int intensity = Math.min(255, volume * 4);
+        g.setColor(new Color(intensity, intensity / 2, 0));
+        g.fillRect(...);
+    }
+}</code></pre>
+
+<p>Ещё 160 000 проверок на одну отрисовку.</p>
+
+<p>Не каждая ячейка превращалась в прямоугольник — пустые значения пропускались. Но проверить значение всё равно нужно.</p>
+
+<p>Если представить десять полных отрисовок в секунду, получим ещё примерно 1,6 млн проверок ячеек в секунду.</p>
+
+<p>Цифры сами по себе не выглядят катастрофическими для современного процессора. Поэтому первая версия и работала нормально.</p>
+
+<p>И это важный момент: простой код не был ошибкой. Для первой задачи он был вполне разумным.</p>
+
+<p><strong>[Вставить artifacts/baseline/02-baseline-code.png]</strong></p>
+
+<h2>А потом я немного изменил условия</h2>
+
+<p>Через два коммита в проекте появился synthetic order book:</p>
+
+<pre style="background:#f5f5f5;border:1px solid #ddd;overflow:auto;padding:12px;"><code>45d73e8 Add synthetic order book state for heatmap rendering</code></pre>
+
+<p>Таймер изменился на <code>new Timer(16, ...)</code>, а за один tick стало применяться 1000 событий.</p>
+
+<p>Примерно 60 обновлений в секунду вместо десяти.</p>
+
+<p>Матрица при этом осталась прежней — <code>200 × 800</code>. Сдвиг всей истории и полный проход при рисовании никуда не исчезли.</p>
+
+<p>Если Swing действительно успевает обслужить около 60 обновлений в секунду, верхнеуровневая оценка уже выглядит так:</p>
+
+<pre style="background:#f5f5f5;border:1px solid #ddd;overflow:auto;padding:12px;"><code>около 9,6 млн перемещений int в секунду
+около 9,6 млн проверок ячеек в секунду
+до 60 000 synthetic events в секунду</code></pre>
+
+<p>Это не benchmark и не фактически измеренный throughput. Таймер Swing не гарантирует идеальные 16 мс, а несколько <code>repaint()</code> могут объединяться.</p>
+
+<p>Это просто оценка работы, которую код просит выполнить.</p>
+
+<p>Компьютер, как обычно, получил повышение нагрузки без обсуждения компенсации.</p>
+
+<h2>Кто подозреваемый?</h2>
+
+<p>На этом этапе подозрительно выглядит сразу всё:</p>
+
+<ul>
+  <li>копирование строк;</li>
+  <li>полный проход по матрице;</li>
+  <li>создание <code>Color</code> во время рисования;</li>
+  <li>обработка 1000 событий;</li>
+  <li>выполнение генерации на EDT;</li>
+  <li>слишком оптимистичный интервал таймера.</li>
+</ul>
+
+<p>Можно выбрать самое некрасивое место и переписать его. Это даже может помочь.</p>
+
+<p>Но тогда мы узнаем только, что после большого изменения программа стала вести себя иначе.</p>
+
+<p>Мне хочется ответить на более скучный — и поэтому полезный — вопрос:</p>
+
+<blockquote style="border-left:4px solid #999;margin-left:0;padding-left:16px;">Куда на самом деле уходит время одного обновления?</blockquote>
+
+<p>В следующей части добавим минимальные измерения и попробуем отделить:</p>
+
+<ul>
+  <li>генерацию событий;</li>
+  <li>обновление данных;</li>
+  <li>сдвиг массива;</li>
+  <li>отрисовку.</li>
+</ul>
+
+<p>А пока первый вывод довольно спокойный:</p>
+
+<blockquote style="border-left:4px solid #999;margin-left:0;padding-left:16px;">Первая версия не была «плохой». Просто задача выросла, а стоимость одной новой колонки оставалась скрыта за коротким методом.</blockquote>
+
+<p>Код проекта:<br>
+<a href="https://github.com/IavnFGV/swing-heat-map" target="_blank">github.com/IavnFGV/swing-heat-map</a></p>
+
