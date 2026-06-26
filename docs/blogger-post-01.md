@@ -57,7 +57,9 @@ private final int[][] heatmap =
 - 800 временных колонок;
 - 160 000 ячеек.
 
-> Здесь вставить screenshot первой версии: `artifacts/baseline/01-baseline-ui.png`.
+![Первая рабочая версия heatmap](../artifacts/baseline/01-baseline-ui.png)
+
+Первая версия выглядела примерно так: много пустоты, немного оранжевого шума и честное окно `Toy Bookmap Heatmap`.
 
 ## Что происходило каждые 100 миллисекунд
 
@@ -148,7 +150,9 @@ for (int y = 0; y < PRICE_LEVELS; y++) {
 
 И это важный момент: простой код не был ошибкой. Для первой задачи он был вполне разумным.
 
-> Здесь вставить screenshot кода со сдвигом и двойным циклом: `artifacts/baseline/02-baseline-code.png`.
+![Код первой версии: Timer и сдвиг матрицы](../artifacts/baseline/02-baseline-code.png)
+
+На скриншоте видно главное: `Timer`, `generateFakeData()`, `repaint()` и тот самый сдвиг строк через `System.arraycopy`.
 
 ## А потом я немного изменил условия
 
