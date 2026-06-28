@@ -1,361 +1,305 @@
-<p>В прошлой части heatmap была честно разобрана до винтиков:</p>
+﻿<p>В прошлой части мы посчитали, сколько работы делает первая версия heatmap.</p>
+
+<p>Получилось не страшно, но уже интересно:</p>
+
+<pre style="background:#f5f5f5;border:1px solid #ddd;overflow:auto;padding:12px;"><code>примерно 1.6 млн копирований int / сек
+примерно 1.6 млн проверок ячеек / сек
+плюс цвет, координаты и fillRect для непустых ячеек</code></pre>
+
+<p>Для первого прототипа это нормально. Он работает. Он рисует. Он даже выглядит так, будто у него есть план на жизнь.</p>
+
+<p>Но дальше нагрузка начинает расти:</p>
 
 <ul>
-  <li>есть двумерный массив;</li>
-  <li>время — это столбцы;</li>
-  <li>цена — это строки;</li>
-  <li>объём превращается в яркость;</li>
-  <li><code>paintComponent</code> превращает всё это в оранжевые прямоугольники.</li>
+  <li>tick становится чаще;</li>
+  <li>событий становится больше;</li>
+  <li>генерация данных усложняется;</li>
+  <li>рисование остаётся на Swing;</li>
+  <li>EDT всё ещё один, маленький и беззащитный.</li>
 </ul>
 
-<p>Но была одна проблема.</p>
+<p>И вот здесь появляется опасный момент.</p>
 
-<p>Это всё ещё был просто красивый шум.</p>
+<p>Можно начать гадать.</p>
 
-<p>Не рынок, не стакан, не заявки, не сделки. Просто генератор случайно тыкал volume в последнюю колонку. Такой аквариум с апельсиновыми пикселями.</p>
+<p><code>System.arraycopy</code> виноват? <code>new Color</code>? <code>fillRect</code>? Генератор событий? Swing? Windows? Фаза луны? Java опять 42?</p>
 
-<p>Теперь сделаем следующий шаг: добавим synthetic order book.</p>
+<p>Гадать приятно, но бесполезно. Поэтому следующий шаг — не оптимизация.</p>
 
-<p><strong>[Вставить изображение: artifacts/orderbook/01-orderbook-ui.png]</strong></p>
+<p>Следующий шаг — добавить измерения.</p>
 
-<h2>Что поменялось</h2>
+<h2>Не настоящий profiler, а первый фонарик</h2>
 
-<p>В первой версии новая колонка заполнялась напрямую:</p>
+<p>Конечно, можно сразу открыть нормальный профилировщик. И позже это придётся сделать.</p>
 
-<pre style="background:#f5f5f5;border:1px solid #ddd;overflow:auto;padding:12px;"><code>int price = middle + random.nextInt(80) - 40;
+<p>Но в прототипе мне хотелось сначала иметь маленькое runtime-окно рядом с приложением: чтобы прямо во время запуска видеть базовые числа.</p>
 
-if (price >= 0 &amp;&amp; price &lt; PRICE_LEVELS) {
-    heatmap[price][TIME_BUCKETS - 1] += random.nextInt(100);
+<p>Не идеально точные. Не академические. Просто достаточно полезные, чтобы перестать спорить с воображаемым bottleneck.</p>
+
+<p>Появляется отдельное окно:</p>
+
+<pre style="background:#f5f5f5;border:1px solid #ddd;overflow:auto;padding:12px;"><code>public class InfoFrame extends JFrame {
+
+    private final JTextArea textArea = new JTextArea();
+
+    public InfoFrame() {
+        super("Debug info");
+
+        textArea.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 14));
+        textArea.setEditable(false);
+
+        setContentPane(new JScrollPane(textArea));
+        setSize(420, 500);
+        setLocation(1250, 100);
+    }
+
+    public void updateText(String text) {
+        textArea.setText(text);
+    }
 }</code></pre>
 
-<p>То есть код сразу писал случайный объём в heatmap.</p>
+<p>Да, это просто <code>JFrame</code> с <code>JTextArea</code>.</p>
 
-<p>На следующем шаге этого уже мало. Теперь между генератором событий и картинкой появляется промежуточное состояние:</p>
+<p>Никакого реактивного dashboard, графиков, Prometheus и маленького Kubernetes под столом.</p>
 
-<pre style="background:#f5f5f5;border:1px solid #ddd;overflow:auto;padding:12px;"><code>private final EventGenerator eventGenerator = new EventGenerator();
-private final OrderBook orderBook = new OrderBook();</code></pre>
+<p>Просто окно, куда можно каждую итерацию писать состояние приложения.</p>
 
-<p>И это важный момент.</p>
+<p><strong>[Вставить изображение: artifacts/profiler/01-profiler-ui.png]</strong></p>
 
-<p>Heatmap больше не является местом, куда генератор напрямую кидает случайные квадратики. Теперь heatmap становится снимком текущего состояния стакана.</p>
+<h2>Что показывать</h2>
 
-<p>Грубо:</p>
+<p>В <code>HeatmapPanel</code> появляется метод <code>updateDebugInfo()</code>.</p>
 
-<pre style="background:#f5f5f5;border:1px solid #ddd;overflow:auto;padding:12px;"><code>события
-→ OrderBook
-→ объёмы по ценовым уровням
-→ новая колонка heatmap
-→ картинка</code></pre>
+<p>Он собирает текст:</p>
 
-<h2>Событие: маленькая запись о том, что случилось</h2>
+<pre style="background:#f5f5f5;border:1px solid #ddd;overflow:auto;padding:12px;"><code>sb.append("=== PERFORMANCE ===\n");
+sb.append("Mode               : ").append(scrollMode).append('\n');
+sb.append("FPS                : ").append(String.format("%.0f", fps)).append('\n');
+sb.append("Generate ms        : ").append(String.format("%.3f", lastGenerateMs)).append('\n');
+sb.append("Memory MB          : ").append(usedMb).append('\n');</code></pre>
 
-<p>Появляется <code>BookEvent</code>:</p>
-
-<pre style="background:#f5f5f5;border:1px solid #ddd;overflow:auto;padding:12px;"><code>public record BookEvent(
-        long timestampNanos,
-        Side side,
-        int price,
-        int volume,
-        EventType type
-) {
-}</code></pre>
-
-<p>В нём есть всё, что нужно для игрушечного стакана:</p>
+<p>Первый блок — базовое самочувствие:</p>
 
 <ul>
-  <li>время события;</li>
-  <li>сторона — <code>BID</code> или <code>ASK</code>;</li>
-  <li>цена;</li>
-  <li>объём;</li>
-  <li>тип события.</li>
+  <li>какой режим прокрутки включён;</li>
+  <li>сколько кадров в секунду примерно рисуется;</li>
+  <li>сколько заняла генерация данных;</li>
+  <li>сколько памяти сейчас используется.</li>
 </ul>
 
-<p>Типов пока три:</p>
+<p>Это не заменяет профилировщик, но сразу отвечает на вопрос: приложение живое или уже делает вид.</p>
 
-<pre style="background:#f5f5f5;border:1px solid #ddd;overflow:auto;padding:12px;"><code>public enum EventType {
-    ADD,
-    CANCEL,
-    TRADE
+<p>Дальше блок нагрузки:</p>
+
+<pre style="background:#f5f5f5;border:1px solid #ddd;overflow:auto;padding:12px;"><code>sb.append("=== LOAD ===\n");
+sb.append("Events/tick        : ").append(eventsPerTick).append('\n');
+sb.append("Approx events/sec  : ").append(eventsPerTick * 60L).append('\n');
+sb.append("Total events       : ").append(totalEvents).append('\n');
+sb.append("Total traded volume: ").append(totalTradedVolume).append('\n');</code></pre>
+
+<p>Здесь важно видеть не только FPS, но и то, под какой нагрузкой он получился.</p>
+
+<p>60 FPS при почти пустой программе и 60 FPS при десятках тысяч событий в секунду — это разные 60 FPS. Одни пришли с отпуска, другие после смены на заводе.</p>
+
+<p>Дальше — состояние рынка:</p>
+
+<pre style="background:#f5f5f5;border:1px solid #ddd;overflow:auto;padding:12px;"><code>sb.append("=== MARKET ===\n");
+sb.append("Best bid           : ").append(bestBid).append('\n');
+sb.append("Best ask           : ").append(bestAsk).append('\n');
+
+if (bestBid != -1 &amp;&amp; bestAsk != -1) {
+    sb.append("Spread             : ").append(bestAsk - bestBid).append('\n');
+    sb.append("Mid                : ").append((bestBid + bestAsk) / 2.0).append('\n');
 }</code></pre>
 
-<p>То есть событие может:</p>
+<p>Это уже не главная тема статьи, но полезный контекст: данные не просто случайно мигают, у них есть bid/ask и spread.</p>
 
-<ul>
-  <li>добавить заявку;</li>
-  <li>снять заявку;</li>
-  <li>исполнить сделку.</li>
-</ul>
+<h2>Маленький Profiler</h2>
 
-<p>Это ещё не настоящие биржевые данные. Но это уже гораздо ближе к нормальной модели, чем “поставим 73 оранжевых попугая в случайную клетку”.</p>
+<p>Сам profiler получился совсем небольшим:</p>
 
-<h2>Генератор событий</h2>
+<pre style="background:#f5f5f5;border:1px solid #ddd;overflow:auto;padding:12px;"><code>public class Profiler {
 
-<p><code>EventGenerator</code> создаёт одно случайное событие:</p>
+    private static final Map&lt;EventType, Double&gt; metrics = new ConcurrentHashMap&lt;&gt;();
 
-<p><strong>[Вставить изображение: artifacts/orderbook/03-event-generator-code.png]</strong></p>
+    public static void measure(EventType name, Runnable runnable) {
+        long start = System.nanoTime();
 
-<pre style="background:#f5f5f5;border:1px solid #ddd;overflow:auto;padding:12px;"><code>public BookEvent nextEvent() {
-    Side side = random.nextBoolean() ? Side.BID : Side.ASK;
+        try {
+            runnable.run();
+        } finally {
+            metrics.put(
+                    name,
+                    (System.nanoTime() - start) / 1_000_000.0
+            );
+        }
+    }
 
-    int distanceFromMid = random.nextInt(50);
-    int price = side == Side.BID
-            ? MID_PRICE - distanceFromMid
-            : MID_PRICE + distanceFromMid;
+    public static Double get(EventType name) {
+        return metrics.get(name);
+    }
 
-    EventType type = switch (random.nextInt(3)) {
-        case 0 -&gt; EventType.ADD;
-        case 1 -&gt; EventType.CANCEL;
-        default -&gt; EventType.TRADE;
-    };
-
-    int volume = 1 + random.nextInt(100);
-
-    return new BookEvent(
-            System.nanoTime(),
-            side,
-            price,
-            volume,
-            type
-    );
+    public enum EventType {
+        APPLY_EVENTS,
+        GEN_DATA,
+        PAINT
+    }
 }</code></pre>
 
-<p>Смысл простой:</p>
-
-<ul>
-  <li>случайно выбираем сторону;</li>
-  <li>если это <code>BID</code>, цена ниже середины;</li>
-  <li>если это <code>ASK</code>, цена выше середины;</li>
-  <li>случайно выбираем тип события;</li>
-  <li>случайно выбираем объём.</li>
-</ul>
-
-<p>Центр рынка:</p>
-
-<pre style="background:#f5f5f5;border:1px solid #ddd;overflow:auto;padding:12px;"><code>MID_PRICE = 1000</code></pre>
-
-<p>Диапазон:</p>
-
-<pre style="background:#f5f5f5;border:1px solid #ddd;overflow:auto;padding:12px;"><code>random.nextInt(50)</code></pre>
-
-<p>То есть bids появляются ниже <code>1000</code>, asks — выше <code>1000</code>, в пределах примерно 50 уровней от середины.</p>
-
-<p>Уже лучше. Теперь у данных есть хоть какая-то форма. Не глубокая финансовая мудрость, но хотя бы не полный пиксельный суп.</p>
-
-<h2>OrderBook: две стороны стакана</h2>
-
-<p><code>OrderBook</code> хранит объёмы отдельно:</p>
-
-<p><strong>[Вставить изображение: artifacts/orderbook/02-orderbook-code.png]</strong></p>
-
-<pre style="background:#f5f5f5;border:1px solid #ddd;overflow:auto;padding:12px;"><code>private final int[] bidVolumes = new int[MarketConfig.PRICE_LEVELS];
-private final int[] askVolumes = new int[MarketConfig.PRICE_LEVELS];</code></pre>
-
-<p>То есть на каждом ценовом уровне может быть:</p>
-
-<ul>
-  <li>bid volume;</li>
-  <li>ask volume.</li>
-</ul>
-
-<p>Когда приходит событие, цена переводится в индекс массива:</p>
-
-<pre style="background:#f5f5f5;border:1px solid #ddd;overflow:auto;padding:12px;"><code>int priceLevel = MarketConfig.priceToLevel(event.price());</code></pre>
-
-<p>В <code>MarketConfig</code> это выглядит так:</p>
-
-<pre style="background:#f5f5f5;border:1px solid #ddd;overflow:auto;padding:12px;"><code>public static final int PRICE_LEVELS = 200;
-public static final int MID_PRICE = 1000;
-public static final int MIN_PRICE = MID_PRICE - PRICE_LEVELS / 2;
-
-public static int priceToLevel(int price) {
-    return price - MIN_PRICE;
-}</code></pre>
-
-<p>Если <code>MID_PRICE = 1000</code>, а уровней <code>200</code>, то:</p>
-
-<pre style="background:#f5f5f5;border:1px solid #ddd;overflow:auto;padding:12px;"><code>MIN_PRICE = 1000 - 100 = 900</code></pre>
-
-<p>Значит:</p>
-
-<pre style="background:#f5f5f5;border:1px solid #ddd;overflow:auto;padding:12px;"><code>price 900  → level 0
-price 1000 → level 100
-price 1099 → level 199</code></pre>
-
-<p>Вот этот перевод цены в индекс массива — маленькая, но важная вещь. Массив не понимает “цену 1000”. Массив понимает “индекс 100”.</p>
-
-<h2>Как событие меняет стакан</h2>
-
-<p>Основная логика:</p>
-
-<pre style="background:#f5f5f5;border:1px solid #ddd;overflow:auto;padding:12px;"><code>int[] sideVolumes = event.side() == Side.BID
-        ? bidVolumes
-        : askVolumes;
-
-switch (event.type()) {
-    case ADD -&gt; sideVolumes[priceLevel] += event.volume();
-    case CANCEL, TRADE -&gt; sideVolumes[priceLevel] =
-            Math.max(0, sideVolumes[priceLevel] - event.volume());
-}</code></pre>
-
-<p>Если пришёл <code>ADD</code>, объём увеличивается.</p>
-
-<p>Если пришёл <code>CANCEL</code> или <code>TRADE</code>, объём уменьшается.</p>
-
-<p><code>Math.max(0, ...)</code> нужен, чтобы объём не ушёл в минус. Потому что отрицательная ликвидность — это уже не рынок, а бухгалтерия после очень плохого понедельника.</p>
-
-<h2>Как OrderBook превращается в heatmap</h2>
-
-<p>Каждый tick теперь выглядит так:</p>
-
-<pre style="background:#f5f5f5;border:1px solid #ddd;overflow:auto;padding:12px;"><code>for (int i = 0; i &lt; MarketConfig.EVENTS_PER_TICK; i++) {
-    BookEvent event = eventGenerator.nextEvent();
-    orderBook.apply(event);
-}
-
-for (int priceLevel = 0; priceLevel &lt; MarketConfig.PRICE_LEVELS; priceLevel++) {
-    heatmap[priceLevel][MarketConfig.TIME_BUCKETS - 1] =
-            orderBook.totalVolumeAt(priceLevel);
-}</code></pre>
-
-<p>То есть:</p>
+<p>Идея простая:</p>
 
 <ol>
-  <li>генерируем пачку событий;</li>
-  <li>применяем их к <code>OrderBook</code>;</li>
-  <li>берём текущее состояние стакана;</li>
-  <li>записываем его в последнюю колонку heatmap.</li>
+  <li>запомнить <code>System.nanoTime()</code> перед операцией;</li>
+  <li>выполнить код;</li>
+  <li>посчитать разницу;</li>
+  <li>сохранить последнее значение в миллисекундах.</li>
 </ol>
 
-<p>Количество событий:</p>
+<p>Это не статистика, не percentiles, не flame graph.</p>
 
-<pre style="background:#f5f5f5;border:1px solid #ddd;overflow:auto;padding:12px;"><code>public static final int EVENTS_PER_TICK = 1000;</code></pre>
+<p>Это просто первый фонарик: куда примерно уходит время прямо сейчас.</p>
 
-<p>А таймер теперь:</p>
+<p><strong>[Вставить изображение: artifacts/profiler/02-profiler-code.png]</strong></p>
 
-<pre style="background:#f5f5f5;border:1px solid #ddd;overflow:auto;padding:12px;"><code>new Timer(16, ...)</code></pre>
+<h2>Куда навесить измерения</h2>
 
-<p>То есть код просит примерно 60 обновлений в секунду.</p>
+<p>Первое место — генерация данных:</p>
 
-<p>Просит — важное слово. Swing не подписывал контракт кровью, что реально будет успевать идеально каждые 16 мс.</p>
+<pre style="background:#f5f5f5;border:1px solid #ddd;overflow:auto;padding:12px;"><code>Timer timer = new Timer(16, e -&gt; {
+    long start = System.nanoTime();
 
-<h2>Best bid и best ask</h2>
+    Profiler.measure(GEN_DATA, this::generateFakeData);
 
-<p>Теперь можно посчитать лучшие цены:</p>
+    lastGenerateMs = (System.nanoTime() - start) / 1_000_000.0;
 
-<pre style="background:#f5f5f5;border:1px solid #ddd;overflow:auto;padding:12px;"><code>public int bestBidPrice() {
-    for (int i = bidVolumes.length - 1; i &gt;= 0; i--) {
-        if (bidVolumes[i] &gt; 0) {
-            return MarketConfig.levelToPrice(i);
+    updateDebugInfo();
+    repaint();
+});</code></pre>
+
+<p>Теперь видно, сколько занимает подготовка данных перед перерисовкой.</p>
+
+<p>Внутри генерации отдельно измеряется применение событий:</p>
+
+<pre style="background:#f5f5f5;border:1px solid #ddd;overflow:auto;padding:12px;"><code>private void applyEvents() {
+    Profiler.measure(APPLY_EVENTS, () -&gt; {
+        for (int i = 0; i &lt; eventsPerTick; i++) {
+            BookEvent event = eventGenerator.nextEvent();
+            orderBook.apply(event);
+
+            totalEvents++;
+
+            if (event.type() == EventType.TRADE) {
+                totalTradedVolume += event.volume();
+            }
         }
-    }
-    return -1;
+    });
 }</code></pre>
 
-<p>Для bid ищем сверху вниз: самая высокая цена покупки.</p>
+<p>Это важно, потому что теперь можно отделить:</p>
 
-<pre style="background:#f5f5f5;border:1px solid #ddd;overflow:auto;padding:12px;"><code>public int bestAskPrice() {
-    for (int i = 0; i &lt; askVolumes.length; i++) {
-        if (askVolumes[i] &gt; 0) {
-            return MarketConfig.levelToPrice(i);
-        }
-    }
-    return -1;
+<pre style="background:#f5f5f5;border:1px solid #ddd;overflow:auto;padding:12px;"><code>генерация всей колонки
+от применения пачки событий</code></pre>
+
+<p>Третье место — отрисовка:</p>
+
+<pre style="background:#f5f5f5;border:1px solid #ddd;overflow:auto;padding:12px;"><code>@Override
+protected void paintComponent(Graphics g) {
+    Profiler.measure(PAINT, () -&gt; draw(g));
 }</code></pre>
 
-<p>Для ask ищем снизу вверх: самая низкая цена продажи.</p>
+<p>Теперь хотя бы грубо видно, сколько занимает Swing-рисование.</p>
 
-<p>После этого в <code>HeatmapPanel</code> появляется история:</p>
+<p>И это уже меняет разговор.</p>
 
-<pre style="background:#f5f5f5;border:1px solid #ddd;overflow:auto;padding:12px;"><code>private final int[] bestBidHistory = new int[MarketConfig.TIME_BUCKETS];
-private final int[] bestAskHistory = new int[MarketConfig.TIME_BUCKETS];</code></pre>
+<p>До этого вопрос звучал так:</p>
 
-<p>Она сдвигается так же, как heatmap:</p>
+<pre style="background:#f5f5f5;border:1px solid #ddd;overflow:auto;padding:12px;"><code>мне кажется, тормозит вот это</code></pre>
 
-<pre style="background:#f5f5f5;border:1px solid #ddd;overflow:auto;padding:12px;"><code>System.arraycopy(bestBidHistory, 1, bestBidHistory, 0, MarketConfig.TIME_BUCKETS - 1);
-System.arraycopy(bestAskHistory, 1, bestAskHistory, 0, MarketConfig.TIME_BUCKETS - 1);
+<p>После этого:</p>
 
-bestBidHistory[MarketConfig.TIME_BUCKETS - 1] = orderBook.bestBidPrice();
-bestAskHistory[MarketConfig.TIME_BUCKETS - 1] = orderBook.bestAskPrice();</code></pre>
+<pre style="background:#f5f5f5;border:1px solid #ddd;overflow:auto;padding:12px;"><code>GEN_DATA занимает столько-то
+APPLY_EVENTS занимает столько-то
+PAINT занимает столько-то</code></pre>
 
-<p>И потом рисуется линиями:</p>
+<p>Меньше магии. Больше скучной пользы.</p>
 
-<pre style="background:#f5f5f5;border:1px solid #ddd;overflow:auto;padding:12px;"><code>drawPriceHistory(g, bestBidHistory, Color.BLUE, cellW, cellH);
-drawPriceHistory(g, bestAskHistory, Color.RED, cellW, cellH);</code></pre>
+<h2>Режимы прокрутки: первая развилка</h2>
 
-<p>Теперь на heatmap появляются две кривые:</p>
+<p>В этом же месте появляется важная подготовка к будущей оптимизации:</p>
+
+<pre style="background:#f5f5f5;border:1px solid #ddd;overflow:auto;padding:12px;"><code>public enum ScrollMode {
+    SHIFT_COPY,
+    CIRCULAR_BUFFER
+}</code></pre>
+
+<p>И управление с клавиатуры:</p>
+
+<pre style="background:#f5f5f5;border:1px solid #ddd;overflow:auto;padding:12px;"><code>1  -&gt; SHIFT_COPY
+2  -&gt; CIRCULAR_BUFFER
++  -&gt; increase load
+-  -&gt; decrease load</code></pre>
+
+<p>Зачем это нужно?</p>
+
+<p>Потому что в прошлой части мы увидели цену <code>SHIFT_COPY</code>: при каждой новой колонке сдвигается почти вся история.</p>
+
+<p>Но прежде чем переписывать всё на кольцевой буфер, удобно иметь возможность переключать режимы прямо в приложении и смотреть разницу.</p>
+
+<p>То есть это ещё не финальная оптимизация.</p>
+
+<p>Это подготовка к честному сравнению.</p>
+
+<h2>Что важно не перепутать</h2>
+
+<p>Такой profiler легко переоценить.</p>
+
+<p>Он показывает полезные числа, но у него есть ограничения:</p>
 
 <ul>
-  <li>синяя — best bid;</li>
-  <li>красная — best ask.</li>
+  <li>он хранит только последнее измерение;</li>
+  <li>он не показывает распределение;</li>
+  <li>он не показывает GC-паузы нормально;</li>
+  <li>он сам тоже выполняется внутри приложения;</li>
+  <li>Swing <code>repaint()</code> не означает немедленный <code>paintComponent()</code>;</li>
+  <li>EDT может объединять перерисовки.</li>
 </ul>
 
-<p>И вот это уже визуально меняет историю.</p>
+<p>То есть это не “истина”.</p>
 
-<p>Раньше было:</p>
-
-<pre style="background:#f5f5f5;border:1px solid #ddd;overflow:auto;padding:12px;"><code>смотри, оранжевое шевелится</code></pre>
-
-<p>Теперь:</p>
-
-<pre style="background:#f5f5f5;border:1px solid #ddd;overflow:auto;padding:12px;"><code>смотри, у стакана есть границы</code></pre>
-
-<h2>Цена этого шага</h2>
-
-<p>На каждом tick теперь добавилось:</p>
-
-<pre style="background:#f5f5f5;border:1px solid #ddd;overflow:auto;padding:12px;"><code>1000 генераций BookEvent
-1000 применений к OrderBook
-200 чтений totalVolumeAt(...)
-2 сдвига истории bestBid/bestAsk по 799 int
-2 поиска best bid / best ask</code></pre>
-
-<p>Плюс старое никуда не исчезло:</p>
-
-<pre style="background:#f5f5f5;border:1px solid #ddd;overflow:auto;padding:12px;"><code>200 × 799 = 159 800 копирований int для heatmap
-200 очисток последней колонки
-полный проход 200 × 800 при paintComponent</code></pre>
-
-<p>А частота стала выше:</p>
-
-<pre style="background:#f5f5f5;border:1px solid #ddd;overflow:auto;padding:12px;"><code>100 ms → 16 ms
-примерно 10 tick/sec → примерно 60 tick/sec</code></pre>
-
-<p>Если грубо оценить только сдвиг heatmap:</p>
-
-<pre style="background:#f5f5f5;border:1px solid #ddd;overflow:auto;padding:12px;"><code>159 800 × 60 = 9 588 000 копирований int / сек</code></pre>
-
-<p>Плюс:</p>
-
-<pre style="background:#f5f5f5;border:1px solid #ddd;overflow:auto;padding:12px;"><code>1000 × 60 = 60 000 synthetic events / сек</code></pre>
-
-<p>Это всё ещё не benchmark. Это бухгалтерия намерений: сколько работы мы попросили выполнить.</p>
-
-<p>И вот теперь становится понятно, почему дальше без измерений лучше не спорить. Можно сколько угодно подозревать <code>System.arraycopy</code>, <code>new Color</code>, <code>fillRect</code>, генератор событий или EDT. Но подозрения — это не profiling. Это просто разработчик смотрит на код и щурится.</p>
+<p>Это приборная панель. Спидометр тоже не объясняет физику двигателя, но без него ехать 180 по ощущениям — сомнительное занятие.</p>
 
 <h2>Итог</h2>
 
-<p>Третья версия всё ещё очень простая.</p>
+<p>После первых двух частей у нас была рабочая heatmap и понимание её базовой цены.</p>
 
-<p>Но смысл данных уже другой:</p>
+<p>Теперь появился следующий слой:</p>
 
-<pre style="background:#f5f5f5;border:1px solid #ddd;overflow:auto;padding:12px;"><code>было:
-random volume → heatmap
+<pre style="background:#f5f5f5;border:1px solid #ddd;overflow:auto;padding:12px;"><code>не просто рисуем
+а наблюдаем, что происходит во время работы</code></pre>
 
-стало:
-BookEvent → OrderBook → snapshot объёмов → heatmap</code></pre>
-
-<p>И визуально появилась новая информация:</p>
+<p>Мы добавили:</p>
 
 <ul>
-  <li>best bid;</li>
-  <li>best ask;</li>
-  <li>spread;</li>
-  <li>примерная нагрузка events/sec.</li>
+  <li>debug window;</li>
+  <li>FPS;</li>
+  <li>время генерации;</li>
+  <li>memory usage;</li>
+  <li>нагрузку events/tick и events/sec;</li>
+  <li>простые метрики <code>GEN_DATA</code>, <code>APPLY_EVENTS</code>, <code>PAINT</code>;</li>
+  <li>переключатель <code>SHIFT_COPY</code> / <code>CIRCULAR_BUFFER</code>.</li>
 </ul>
 
-<p>Это уже похоже не просто на картинку, а на маленький симулятор рыночного состояния.</p>
+<p>Это всё ещё не промышленный profiling.</p>
 
-<p>В следующей части я хочу сделать скучную, но важную вещь: добавить измерения. Потому что теперь у нас есть несколько подозреваемых, и пора перестать выбирать виновного по выражению лица.</p>
+<p>Но это важный переход: дальше можно не гадать, а сравнивать.</p>
+
+<p>В следующей части уже можно будет поставить рядом два подхода:</p>
+
+<pre style="background:#f5f5f5;border:1px solid #ddd;overflow:auto;padding:12px;"><code>SHIFT_COPY
+vs
+CIRCULAR_BUFFER</code></pre>
+
+<p>И проверить главную идею: что если проблема не в том, что мы медленно копируем массив, а в том, что мы вообще его копируем.</p>
 
 <p>Код проекта:<br>
 <a href="https://github.com/IavnFGV/swing-heat-map" target="_blank">github.com/IavnFGV/swing-heat-map</a></p>
