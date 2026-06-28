@@ -1,42 +1,75 @@
-﻿<p>В прошлой части мы посчитали, сколько работы делает первая версия heatmap.</p>
+<p>В прошлой части мы разобрали первую версию heatmap: один <code>JPanel</code>, один двумерный массив, один <code>Timer</code> и оранжевые квадратики.</p>
 
-<p>Получилось не страшно, но уже интересно:</p>
+<p>Она была страшненькая, но честная.</p>
 
-<pre style="background:#f5f5f5;border:1px solid #ddd;overflow:auto;padding:12px;"><code>примерно 1.6 млн копирований int / сек
-примерно 1.6 млн проверок ячеек / сек
-плюс цвет, координаты и fillRect для непустых ячеек</code></pre>
+<p>И это важно сохранить.</p>
 
-<p>Для первого прототипа это нормально. Он работает. Он рисует. Он даже выглядит так, будто у него есть план на жизнь.</p>
+<p>Мне не хочется сейчас перескакивать к красивой версии проекта, где уже есть отдельные панели, стакан, графики, CVD и маленький зоопарк классов. Это будет другая история.</p>
 
-<p>Но дальше нагрузка начинает расти:</p>
+<p>Сейчас задача проще:</p>
+
+<blockquote style="border-left:4px solid #999;margin-left:0;padding-left:16px;">оставить тот же базовый heatmap, но добавить рядом окно с измерениями.</blockquote>
+
+<p>То есть не “переписываем приложение”, а “прикручиваем спидометр к телеге”.</p>
+
+<h2>Зачем вообще добавлять profiler</h2>
+
+<p>В прошлой части мы посчитали примерную цену первой версии:</p>
+
+<pre style="background:#f5f5f5;border:1px solid #ddd;overflow:auto;padding:12px;"><code>≈ 1.6 млн копирований int / сек
+≈ 1.6 млн проверок ячеек / сек
++ цвет, координаты и fillRect для непустых ячеек</code></pre>
+
+<p>Это ещё не страшно. Но уже понятно, что дальше гадать будет опасно.</p>
+
+<p>Можно начать спорить:</p>
 
 <ul>
-  <li>tick становится чаще;</li>
-  <li>событий становится больше;</li>
-  <li>генерация данных усложняется;</li>
-  <li>рисование остаётся на Swing;</li>
-  <li>EDT всё ещё один, маленький и беззащитный.</li>
+  <li>виноват <code>System.arraycopy</code>;</li>
+  <li>нет, виноват <code>paintComponent</code>;</li>
+  <li>нет, виноват <code>new Color</code>;</li>
+  <li>нет, Swing старый;</li>
+  <li>нет, просто день такой.</li>
 </ul>
 
-<p>И вот здесь появляется опасный момент.</p>
+<p>Это весёлый способ провести вечер, но плохой способ заниматься производительностью.</p>
 
-<p>Можно начать гадать.</p>
+<p>Поэтому следующий шаг — не оптимизация.</p>
 
-<p><code>System.arraycopy</code> виноват? <code>new Color</code>? <code>fillRect</code>? Генератор событий? Swing? Windows? Фаза луны? Java опять 42?</p>
+<p>Следующий шаг — измерения.</p>
 
-<p>Гадать приятно, но бесполезно. Поэтому следующий шаг — не оптимизация.</p>
+<h2>Оставляем тот же ugly heatmap</h2>
 
-<p>Следующий шаг — добавить измерения.</p>
+<p>Важно: heatmap остаётся той же.</p>
 
-<h2>Не настоящий profiler, а первый фонарик</h2>
+<p>Данные всё ещё лежат здесь:</p>
 
-<p>Конечно, можно сразу открыть нормальный профилировщик. И позже это придётся сделать.</p>
+<pre style="background:#f5f5f5;border:1px solid #ddd;overflow:auto;padding:12px;"><code>private static final int PRICE_LEVELS = 200;
+private static final int TIME_BUCKETS = 800;
 
-<p>Но в прототипе мне хотелось сначала иметь маленькое runtime-окно рядом с приложением: чтобы прямо во время запуска видеть базовые числа.</p>
+private final int[][] heatmap = new int[PRICE_LEVELS][TIME_BUCKETS];</code></pre>
 
-<p>Не идеально точные. Не академические. Просто достаточно полезные, чтобы перестать спорить с воображаемым bottleneck.</p>
+<p>Таймер всё ещё простой:</p>
 
-<p>Появляется отдельное окно:</p>
+<pre style="background:#f5f5f5;border:1px solid #ddd;overflow:auto;padding:12px;"><code>private static final int TIMER_MS = 100;
+private static final int RANDOM_UPDATES_PER_TICK = 100;</code></pre>
+
+<p>Каждый tick:</p>
+
+<ul>
+  <li>сдвигает историю влево;</li>
+  <li>очищает последнюю колонку;</li>
+  <li>добавляет 100 случайных обновлений;</li>
+  <li>просит Swing перерисовать панель.</li>
+</ul>
+
+<p>То есть это всё ещё тот самый прототип. Просто теперь рядом будет табличка с цифрами.</p>
+
+<p><strong>[Вставить изображение: artifacts/profiler/01-profiler-ui.png]</strong></p>
+
+<h2>Окно Debug info</h2>
+
+<p>Для вывода метрик добавляем отдельное окно:</p>
 
 <pre style="background:#f5f5f5;border:1px solid #ddd;overflow:auto;padding:12px;"><code>public class InfoFrame extends JFrame {
 
@@ -49,7 +82,7 @@
         textArea.setEditable(false);
 
         setContentPane(new JScrollPane(textArea));
-        setSize(420, 500);
+        setSize(420, 420);
         setLocation(1250, 100);
     }
 
@@ -58,248 +91,219 @@
     }
 }</code></pre>
 
-<p>Да, это просто <code>JFrame</code> с <code>JTextArea</code>.</p>
+<p>Никакой магии: обычный <code>JFrame</code>, внутри <code>JTextArea</code>.</p>
 
-<p>Никакого реактивного dashboard, графиков, Prometheus и маленького Kubernetes под столом.</p>
+<p><code>setLocation(1250, 100)</code> просто ставит окно правее основного приложения: 1250 пикселей от левого края экрана и 100 пикселей сверху. Это не performance-идея, а бытовая попытка не закрывать heatmap окном с цифрами.</p>
 
-<p>Просто окно, куда можно каждую итерацию писать состояние приложения.</p>
+<p>В <code>Starter</code> теперь создаются два окна:</p>
 
-<p><strong>[Вставить изображение: artifacts/profiler/01-profiler-ui.png]</strong></p>
+<pre style="background:#f5f5f5;border:1px solid #ddd;overflow:auto;padding:12px;"><code>InfoFrame infoFrame = new InfoFrame();
 
-<h2>Что показывать</h2>
+JFrame frame = new JFrame("Toy Bookmap Heatmap");
+frame.setContentPane(new HeatmapPanel(infoFrame));
 
-<p>В <code>HeatmapPanel</code> появляется метод <code>updateDebugInfo()</code>.</p>
+frame.setVisible(true);
+infoFrame.setVisible(true);</code></pre>
 
-<p>Он собирает текст:</p>
-
-<pre style="background:#f5f5f5;border:1px solid #ddd;overflow:auto;padding:12px;"><code>sb.append("=== PERFORMANCE ===\n");
-sb.append("Mode               : ").append(scrollMode).append('\n');
-sb.append("FPS                : ").append(String.format("%.0f", fps)).append('\n');
-sb.append("Generate ms        : ").append(String.format("%.3f", lastGenerateMs)).append('\n');
-sb.append("Memory MB          : ").append(usedMb).append('\n');</code></pre>
-
-<p>Первый блок — базовое самочувствие:</p>
-
-<ul>
-  <li>какой режим прокрутки включён;</li>
-  <li>сколько кадров в секунду примерно рисуется;</li>
-  <li>сколько заняла генерация данных;</li>
-  <li>сколько памяти сейчас используется.</li>
-</ul>
-
-<p>Это не заменяет профилировщик, но сразу отвечает на вопрос: приложение живое или уже делает вид.</p>
-
-<p>Дальше блок нагрузки:</p>
-
-<pre style="background:#f5f5f5;border:1px solid #ddd;overflow:auto;padding:12px;"><code>sb.append("=== LOAD ===\n");
-sb.append("Events/tick        : ").append(eventsPerTick).append('\n');
-sb.append("Approx events/sec  : ").append(eventsPerTick * 60L).append('\n');
-sb.append("Total events       : ").append(totalEvents).append('\n');
-sb.append("Total traded volume: ").append(totalTradedVolume).append('\n');</code></pre>
-
-<p>Здесь важно видеть не только FPS, но и то, под какой нагрузкой он получился.</p>
-
-<p>60 FPS при почти пустой программе и 60 FPS при десятках тысяч событий в секунду — это разные 60 FPS. Одни пришли с отпуска, другие после смены на заводе.</p>
-
-<p>Дальше — состояние рынка:</p>
-
-<pre style="background:#f5f5f5;border:1px solid #ddd;overflow:auto;padding:12px;"><code>sb.append("=== MARKET ===\n");
-sb.append("Best bid           : ").append(bestBid).append('\n');
-sb.append("Best ask           : ").append(bestAsk).append('\n');
-
-if (bestBid != -1 &amp;&amp; bestAsk != -1) {
-    sb.append("Spread             : ").append(bestAsk - bestBid).append('\n');
-    sb.append("Mid                : ").append((bestBid + bestAsk) / 2.0).append('\n');
-}</code></pre>
-
-<p>Это уже не главная тема статьи, но полезный контекст: данные не просто случайно мигают, у них есть bid/ask и spread.</p>
+<p>Основной heatmap остаётся на месте. Просто рядом появляется “приборная панель”.</p>
 
 <h2>Маленький Profiler</h2>
 
-<p>Сам profiler получился совсем небольшим:</p>
+<p>Сам profiler тоже максимально простой:</p>
 
-<pre style="background:#f5f5f5;border:1px solid #ddd;overflow:auto;padding:12px;"><code>public class Profiler {
+<pre style="background:#f5f5f5;border:1px solid #ddd;overflow:auto;padding:12px;"><code>public final class Profiler {
 
-    private static final Map&lt;EventType, Double&gt; metrics = new ConcurrentHashMap&lt;&gt;();
+    private static final Map&lt;EventType, Double&gt; metrics =
+            new ConcurrentHashMap&lt;&gt;();
 
-    public static void measure(EventType name, Runnable runnable) {
+    public static void measure(EventType eventType, Runnable runnable) {
         long start = System.nanoTime();
 
         try {
             runnable.run();
         } finally {
             metrics.put(
-                    name,
+                    eventType,
                     (System.nanoTime() - start) / 1_000_000.0
             );
         }
     }
 
-    public static Double get(EventType name) {
-        return metrics.get(name);
+    public static double get(EventType eventType) {
+        return metrics.getOrDefault(eventType, 0.0);
     }
 
     public enum EventType {
-        APPLY_EVENTS,
-        GEN_DATA,
+        GENERATE_DATA,
         PAINT
     }
 }</code></pre>
 
-<p>Идея простая:</p>
+<p>Идея такая:</p>
 
 <ol>
-  <li>запомнить <code>System.nanoTime()</code> перед операцией;</li>
-  <li>выполнить код;</li>
-  <li>посчитать разницу;</li>
-  <li>сохранить последнее значение в миллисекундах.</li>
+  <li>запомнили время до операции;</li>
+  <li>выполнили операцию;</li>
+  <li>посчитали разницу;</li>
+  <li>сохранили последнее значение в миллисекундах.</li>
 </ol>
 
-<p>Это не статистика, не percentiles, не flame graph.</p>
+<p>Это не промышленный profiling.</p>
 
-<p>Это просто первый фонарик: куда примерно уходит время прямо сейчас.</p>
+<p>Это первый фонарик.</p>
 
 <p><strong>[Вставить изображение: artifacts/profiler/02-profiler-code.png]</strong></p>
 
-<h2>Куда навесить измерения</h2>
+<h2>Куда навешиваем измерения</h2>
 
 <p>Первое место — генерация данных:</p>
 
-<pre style="background:#f5f5f5;border:1px solid #ddd;overflow:auto;padding:12px;"><code>Timer timer = new Timer(16, e -&gt; {
-    long start = System.nanoTime();
-
-    Profiler.measure(GEN_DATA, this::generateFakeData);
-
-    lastGenerateMs = (System.nanoTime() - start) / 1_000_000.0;
+<pre style="background:#f5f5f5;border:1px solid #ddd;overflow:auto;padding:12px;"><code>Timer timer = new Timer(TIMER_MS, e -&gt; {
+    Profiler.measure(
+            Profiler.EventType.GENERATE_DATA,
+            this::generateFakeData
+    );
 
     updateDebugInfo();
     repaint();
 });</code></pre>
 
-<p>Теперь видно, сколько занимает подготовка данных перед перерисовкой.</p>
+<p>Теперь мы видим, сколько занимает:</p>
 
-<p>Внутри генерации отдельно измеряется применение событий:</p>
+<ul>
+  <li>сдвиг массива;</li>
+  <li>очистка последней колонки;</li>
+  <li>добавление случайных значений.</li>
+</ul>
 
-<pre style="background:#f5f5f5;border:1px solid #ddd;overflow:auto;padding:12px;"><code>private void applyEvents() {
-    Profiler.measure(APPLY_EVENTS, () -&gt; {
-        for (int i = 0; i &lt; eventsPerTick; i++) {
-            BookEvent event = eventGenerator.nextEvent();
-            orderBook.apply(event);
-
-            totalEvents++;
-
-            if (event.type() == EventType.TRADE) {
-                totalTradedVolume += event.volume();
-            }
-        }
-    });
-}</code></pre>
-
-<p>Это важно, потому что теперь можно отделить:</p>
-
-<pre style="background:#f5f5f5;border:1px solid #ddd;overflow:auto;padding:12px;"><code>генерация всей колонки
-от применения пачки событий</code></pre>
-
-<p>Третье место — отрисовка:</p>
+<p>Второе место — отрисовка:</p>
 
 <pre style="background:#f5f5f5;border:1px solid #ddd;overflow:auto;padding:12px;"><code>@Override
 protected void paintComponent(Graphics g) {
-    Profiler.measure(PAINT, () -&gt; draw(g));
+    Profiler.measure(Profiler.EventType.PAINT, () -&gt; draw(g));
 }</code></pre>
 
-<p>Теперь хотя бы грубо видно, сколько занимает Swing-рисование.</p>
+<p>А старый код рисования просто переехал в метод <code>draw(g)</code>:</p>
 
-<p>И это уже меняет разговор.</p>
+<pre style="background:#f5f5f5;border:1px solid #ddd;overflow:auto;padding:12px;"><code>private void draw(Graphics g) {
+    super.paintComponent(g);
 
-<p>До этого вопрос звучал так:</p>
-
-<pre style="background:#f5f5f5;border:1px solid #ddd;overflow:auto;padding:12px;"><code>мне кажется, тормозит вот это</code></pre>
-
-<p>После этого:</p>
-
-<pre style="background:#f5f5f5;border:1px solid #ddd;overflow:auto;padding:12px;"><code>GEN_DATA занимает столько-то
-APPLY_EVENTS занимает столько-то
-PAINT занимает столько-то</code></pre>
-
-<p>Меньше магии. Больше скучной пользы.</p>
-
-<h2>Режимы прокрутки: первая развилка</h2>
-
-<p>В этом же месте появляется важная подготовка к будущей оптимизации:</p>
-
-<pre style="background:#f5f5f5;border:1px solid #ddd;overflow:auto;padding:12px;"><code>public enum ScrollMode {
-    SHIFT_COPY,
-    CIRCULAR_BUFFER
+    // старый проход по heatmap[y][x]
+    // старый расчёт цвета
+    // старый fillRect(...)
 }</code></pre>
 
-<p>И управление с клавиатуры:</p>
+<p>То есть мы не меняем смысл рисования. Мы только оборачиваем его секундомером.</p>
 
-<pre style="background:#f5f5f5;border:1px solid #ddd;overflow:auto;padding:12px;"><code>1  -&gt; SHIFT_COPY
-2  -&gt; CIRCULAR_BUFFER
-+  -&gt; increase load
--  -&gt; decrease load</code></pre>
+<p><strong>[Вставить изображение: artifacts/profiler/03-measure-points.png]</strong></p>
 
-<p>Зачем это нужно?</p>
+<h2>Что выводим в окно</h2>
 
-<p>Потому что в прошлой части мы увидели цену <code>SHIFT_COPY</code>: при каждой новой колонке сдвигается почти вся история.</p>
+<p>В <code>HeatmapPanel</code> появляется <code>updateDebugInfo()</code>:</p>
 
-<p>Но прежде чем переписывать всё на кольцевой буфер, удобно иметь возможность переключать режимы прямо в приложении и смотреть разницу.</p>
+<pre style="background:#f5f5f5;border:1px solid #ddd;overflow:auto;padding:12px;"><code>sb.append("=== PERFORMANCE ===\n");
+sb.append("FPS                : ").append(String.format("%.0f", fps)).append('\n');
+sb.append("Generate ms        : ")
+        .append(String.format("%.3f", Profiler.get(GENERATE_DATA)))
+        .append('\n');
+sb.append("Paint ms           : ")
+        .append(String.format("%.3f", Profiler.get(PAINT)))
+        .append('\n');
+sb.append("Memory MB          : ").append(usedMb).append('\n');</code></pre>
 
-<p>То есть это ещё не финальная оптимизация.</p>
-
-<p>Это подготовка к честному сравнению.</p>
-
-<h2>Что важно не перепутать</h2>
-
-<p>Такой profiler легко переоценить.</p>
-
-<p>Он показывает полезные числа, но у него есть ограничения:</p>
+<p>Первый блок показывает базовое самочувствие:</p>
 
 <ul>
-  <li>он хранит только последнее измерение;</li>
-  <li>он не показывает распределение;</li>
-  <li>он не показывает GC-паузы нормально;</li>
-  <li>он сам тоже выполняется внутри приложения;</li>
-  <li>Swing <code>repaint()</code> не означает немедленный <code>paintComponent()</code>;</li>
-  <li>EDT может объединять перерисовки.</li>
+  <li>FPS;</li>
+  <li>время генерации;</li>
+  <li>время отрисовки;</li>
+  <li>память.</li>
 </ul>
 
-<p>То есть это не “истина”.</p>
+<p>Дальше выводим нагрузку:</p>
 
-<p>Это приборная панель. Спидометр тоже не объясняет физику двигателя, но без него ехать 180 по ощущениям — сомнительное занятие.</p>
+<pre style="background:#f5f5f5;border:1px solid #ddd;overflow:auto;padding:12px;"><code>sb.append("=== LOAD ===\n");
+sb.append("Timer ms           : ").append(TIMER_MS).append('\n');
+sb.append("Requested ticks/sec: ").append(requestedTicksPerSecond).append('\n');
+sb.append("Random updates/tick: ").append(RANDOM_UPDATES_PER_TICK).append('\n');
+sb.append("Ticks generated    : ").append(tickCount).append('\n');</code></pre>
+
+<p>И параметры матрицы:</p>
+
+<pre style="background:#f5f5f5;border:1px solid #ddd;overflow:auto;padding:12px;"><code>sb.append("=== MATRIX ===\n");
+sb.append("Price levels       : ").append(PRICE_LEVELS).append('\n');
+sb.append("Time buckets       : ").append(TIME_BUCKETS).append('\n');
+sb.append("Cells              : ").append(PRICE_LEVELS * TIME_BUCKETS).append('\n');
+sb.append("Copied int/tick    : ").append(copiedIntsPerTick).append('\n');
+sb.append("Cleared cells/tick : ").append(clearedCellsPerTick).append('\n');
+sb.append("Checks/paint       : ").append(matrixChecksPerPaint).append('\n');</code></pre>
+
+<p>Это почти те же расчёты, что были в прошлой статье, только теперь они живут прямо рядом с приложением.</p>
+
+<h2>Почему это полезно</h2>
+
+<p>До этого мы могли сказать:</p>
+
+<pre style="background:#f5f5f5;border:1px solid #ddd;overflow:auto;padding:12px;"><code>кажется, paintComponent может стать дорогим</code></pre>
+
+<p>Теперь можно смотреть:</p>
+
+<pre style="background:#f5f5f5;border:1px solid #ddd;overflow:auto;padding:12px;"><code>Generate ms: 0.XXX
+Paint ms   : 0.XXX
+FPS        : XX</code></pre>
+
+<p>Да, это грубые числа.</p>
+
+<p>Да, они не заменяют нормальный profiler.</p>
+
+<p>Да, <code>repaint()</code> не означает немедленную отрисовку, а Swing может объединять repaint-запросы.</p>
+
+<p>Но это уже лучше, чем выбирать виновного по настроению.</p>
+
+<h2>Важное ограничение</h2>
+
+<p>Этот profiler показывает только последнее измерение.</p>
+
+<p>Он не показывает:</p>
+
+<ul>
+  <li>среднее значение;</li>
+  <li>p95/p99;</li>
+  <li>паузы GC;</li>
+  <li>flame graph;</li>
+  <li>кто именно внутри <code>paintComponent</code> съел время.</li>
+</ul>
+
+<p>Зато он очень дешёвый и понятный.</p>
+
+<p>Для текущего этапа этого достаточно: нам нужно не доказать диссертацию, а перестать работать вслепую.</p>
 
 <h2>Итог</h2>
 
-<p>После первых двух частей у нас была рабочая heatmap и понимание её базовой цены.</p>
+<p>Мы не сделали приложение красивее.</p>
 
-<p>Теперь появился следующий слой:</p>
+<p>И это хорошо.</p>
 
-<pre style="background:#f5f5f5;border:1px solid #ddd;overflow:auto;padding:12px;"><code>не просто рисуем
-а наблюдаем, что происходит во время работы</code></pre>
-
-<p>Мы добавили:</p>
+<p>Heatmap осталась такой же простой и немного страшной. Зато теперь рядом есть окно, которое показывает:</p>
 
 <ul>
-  <li>debug window;</li>
   <li>FPS;</li>
   <li>время генерации;</li>
-  <li>memory usage;</li>
-  <li>нагрузку events/tick и events/sec;</li>
-  <li>простые метрики <code>GEN_DATA</code>, <code>APPLY_EVENTS</code>, <code>PAINT</code>;</li>
-  <li>переключатель <code>SHIFT_COPY</code> / <code>CIRCULAR_BUFFER</code>.</li>
+  <li>время отрисовки;</li>
+  <li>память;</li>
+  <li>параметры нагрузки;</li>
+  <li>размер матрицы;</li>
+  <li>примерную цену tick.</li>
 </ul>
 
-<p>Это всё ещё не промышленный profiling.</p>
+<p>Это правильный следующий шаг в исследовании производительности Swing:</p>
 
-<p>Но это важный переход: дальше можно не гадать, а сравнивать.</p>
+<pre style="background:#f5f5f5;border:1px solid #ddd;overflow:auto;padding:12px;"><code>сначала рабочий прототип
+потом расчёт операций
+потом runtime-метрики
+и только потом оптимизация</code></pre>
 
-<p>В следующей части уже можно будет поставить рядом два подхода:</p>
+<p>В следующей части уже можно будет менять условия: увеличивать частоту, количество событий, размер данных — и смотреть не “кажется быстрее”, а что меняется в цифрах.</p>
 
-<pre style="background:#f5f5f5;border:1px solid #ddd;overflow:auto;padding:12px;"><code>SHIFT_COPY
-vs
-CIRCULAR_BUFFER</code></pre>
-
-<p>И проверить главную идею: что если проблема не в том, что мы медленно копируем массив, а в том, что мы вообще его копируем.</p>
-
-<p>Код проекта:<br>
-<a href="https://github.com/IavnFGV/swing-heat-map" target="_blank">github.com/IavnFGV/swing-heat-map</a></p>
+<p>Код demo-ветки:<br>
+<a href="https://github.com/IavnFGV/swing-heat-map/tree/demo/ugly-heatmap-profiler" target="_blank">github.com/IavnFGV/swing-heat-map/tree/demo/ugly-heatmap-profiler</a></p>

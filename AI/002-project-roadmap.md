@@ -1077,3 +1077,43 @@ Baseline/demo папка:
 1. `artifacts/profiler/01-profiler-ui.png` — приложение + окно `Debug info`;
 2. `artifacts/profiler/02-profiler-code.png` — код `Profiler`;
 3. по желанию screenshot мест с `Profiler.measure(...)` в `HeatmapPanel`.
+
+### 2026-06-28 — создана правильная demo-ветка: ugly heatmap + profiler
+
+Проблема:
+
+- коммит `2ff60c4` уже слишком далеко ушёл от базовой версии;
+- для третьей статьи получался скачок от простого оранжевого heatmap к более сложному проекту;
+- это ломало линию серии: исследуем производительность Swing постепенно.
+
+Решение:
+
+- создать отдельную ветку от первого рабочего коммита `b0658a5`;
+- оставить heatmap такой же простой и страшненькой;
+- добавить только `InfoFrame`, `Profiler` и минимальные runtime-метрики.
+
+Создана и запушена demo-ветка:
+
+- `demo/ugly-heatmap-profiler`;
+- commit: `18f3cb1 Add profiler window to baseline heatmap`;
+- базируется на `b0658a5`.
+
+Что добавлено в demo:
+
+- `InfoFrame` — отдельное окно `Debug info`;
+- `Profiler` — простой `System.nanoTime()` wrapper;
+- замер `GENERATE_DATA`;
+- замер `PAINT`;
+- вывод FPS, generate ms, paint ms, memory MB;
+- вывод параметров нагрузки и расчётов по матрице.
+
+Важно:
+
+- модель данных не менялась;
+- `OrderBook`, bid/ask, CVD и красивые панели не добавлялись;
+- это именно “тот же ugly heatmap, но покрытый профилировщиком”.
+
+Третья статья переписана под этот артефакт:
+
+- `docs/blogger-post-02.md`;
+- `docs/blogger-post-02.html`.
