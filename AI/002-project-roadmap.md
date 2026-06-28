@@ -1010,3 +1010,35 @@ GitHub:
 - пользователь открыл VS Code в этой же baseline-папке, поэтому дальше работаем с ней, не заставляя прыгать между каталогами;
 - если нужно вернуться к первой версии, коммит baseline: `b0658a5`.
 - если нужно показать самый первый технический ввод `OrderBook`, коммит: `45d73e8`.
+
+### 2026-06-28 — подготовлен черновик третьей статьи
+
+Созданы:
+
+- `docs/blogger-post-02.md`;
+- `docs/blogger-post-02.html`.
+
+Тема:
+
+> Synthetic order book: как первая heatmap перестаёт быть просто оранжевым шумом и начинает показывать состояние стакана.
+
+Основная линия:
+
+- раньше: `random volume → heatmap`;
+- теперь: `BookEvent → OrderBook → snapshot объёмов → heatmap`;
+- появляются `BID` / `ASK`, `ADD` / `CANCEL` / `TRADE`;
+- появляются `bestBidHistory` и `bestAskHistory`;
+- на экране появляются линии best bid / best ask;
+- нагрузка растёт: `Timer(16)`, `EVENTS_PER_TICK = 1000`, примерно `60 000 synthetic events/sec` как requested work.
+
+Перед публикацией нужны артефакты:
+
+1. `artifacts/orderbook/01-orderbook-ui.png` — screenshot версии `75ee2b6`;
+2. `artifacts/orderbook/02-orderbook-code.png` — screenshot `OrderBook`;
+3. `artifacts/orderbook/03-event-generator-code.png` — screenshot `EventGenerator`.
+
+Следующий практический шаг:
+
+- запустить `.\artifacts\baseline\start.cmd`;
+- убедиться, что открылась версия с best bid / best ask curves;
+- сделать 3 screenshot по списку выше.
