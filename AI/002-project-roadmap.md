@@ -1042,3 +1042,38 @@ GitHub:
 - запустить `.\artifacts\baseline\start.cmd`;
 - убедиться, что открылась версия с best bid / best ask curves;
 - сделать 3 screenshot по списку выше.
+
+### 2026-06-28 — третья статья перенесена в отдельную ветку и перефокусирована на profiler
+
+Создана и запушена ветка:
+
+- `article/profiler-stage`;
+- commit: `a99f50b Reframe third post around runtime profiling`.
+
+Решение по содержанию:
+
+- не делать третью статью подробным разбором synthetic order book;
+- отойти от строгой истории коммитов;
+- держать главную линию серии: исследование производительности Swing;
+- третий этап сформулировать так: рабочий прототип есть, нагрузка растёт, гадать о bottleneck бессмысленно, поэтому добавляем runtime profiler и debug window.
+
+Baseline/demo папка:
+
+- `D:\projects\swing-heat-map-baseline`;
+- переключена на `2ff60c4 Add runtime profiling for heatmap rendering pipeline`;
+- сборка успешна.
+
+Актуальные файлы третьей статьи в ветке:
+
+- `docs/blogger-post-02.md`;
+- `docs/blogger-post-02.html`.
+
+Новая тема:
+
+> Swing heatmap: перестаём гадать и добавляем окно производительности.
+
+Перед публикацией нужны новые артефакты:
+
+1. `artifacts/profiler/01-profiler-ui.png` — приложение + окно `Debug info`;
+2. `artifacts/profiler/02-profiler-code.png` — код `Profiler`;
+3. по желанию screenshot мест с `Profiler.measure(...)` в `HeatmapPanel`.
