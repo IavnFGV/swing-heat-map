@@ -1,37 +1,23 @@
 <p>В <a href="https://iavnfgv.blogspot.com/2026/06/swing-10.html" target="_blank">прошлой записи</a> я показал, во что постепенно превратился мой эксперимент с Java Swing.</p>
 
-<p>Теперь сделаем несколько шагов назад — туда, где ещё нет стакана, CVD, исторических данных и небольшого зоопарка внутренних метрик.</p>
+<p>Теперь сделаем несколько шагов назад.</p>
 
 <p>Есть один <code>JPanel</code>.</p>
 
-<p>И он уже очень старается.</p>
-
-<p>Эта часть не про то, что <code>int[][]</code> — зло, а <code>System.arraycopy</code> надо срочно запретить постановлением правительства.</p>
-
-<p>Скорее наоборот: перед тем как героически оптимизировать код, полезно хотя бы на салфетке посчитать, какую работу мы вообще просим выполнить.</p>
+<p>Перед тем как оптимизировать код, полезно посчитать, какую работу мы вообще выполняем.</p>
 
 <p>В этой записи я хочу сделать именно это:</p>
 
 <ul>
   <li>взять первую рабочую версию;</li>
   <li>найти операции, которые выполняются каждый tick;</li>
-  <li>прикинуть их стоимость в секунду;</li>
-  <li>понять, где стоит измерять, а где пока рано доставать огнетушитель.</li>
-</ul>
-
-<p>Это не заменяет профайлер. Но хорошо защищает от оптимизации по ощущениям. А ощущения у разработчика, как известно, иногда работают на генераторе случайных чисел.</p>
+  <li>прикинуть их стоимость в секунду;</li></ul>
 
 <h2>Первый рабочий коммит</h2>
 
-<p>Первый рабочий коммит называется честно:</p>
-
-<pre style="background:#f5f5f5;border:1px solid #ddd;overflow:auto;padding:12px;"><code>b0658a5 initial commit - success render with stubs</code></pre>
-
-<p>Никакой ложной скромности. Успешно отрендерили заглушки — сразу фиксируем историческое достижение.</p>
-
 <p>Вся heatmap хранилась в обычной матрице:</p>
 
-<pre style="background:#f5f5f5;border:1px solid #ddd;overflow:auto;padding:12px;"><code>private static final int PRICE_LEVELS = 200;
+<pre style="background: rgb(245, 245, 245); border: 1px solid rgb(221, 221, 221); overflow: auto; padding: 12px;"><code>private static final int PRICE_LEVELS = 200;
 private static final int TIME_BUCKETS = 800;
 
 private final int[][] heatmap =
@@ -45,15 +31,11 @@ private final int[][] heatmap =
   <li>160 000 ячеек.</li>
 </ul>
 
-<p><strong>[Вставить изображение: artifacts/baseline/01-baseline-ui.png]</strong></p>
+<div class="separator" style="clear: both; text-align: center;"><a href="https://blogger.googleusercontent.com/img/a/AVvXsEiUko8F_-kVEGocyx2fm4lQYEoAj4t3Fz4TLblp6i03V7Q2q0xtdNZyWyb3uQBwGTQNXBJTm5y64J2KR-F-sEMYc4M0c3G2fwzQZ1Q9p8jra-MR-h4wzVntHxnhpQ5cmsSPYia_LuamQxDmIykjO55sWIBSHMO-gsvY2cAP7mk_tuGSkT9mYgW-pzQt0IRY" style="margin-left: 1em; margin-right: 1em;"><img alt="" data-original-height="796" data-original-width="1192" height="214" src="https://blogger.googleusercontent.com/img/a/AVvXsEiUko8F_-kVEGocyx2fm4lQYEoAj4t3Fz4TLblp6i03V7Q2q0xtdNZyWyb3uQBwGTQNXBJTm5y64J2KR-F-sEMYc4M0c3G2fwzQZ1Q9p8jra-MR-h4wzVntHxnhpQ5cmsSPYia_LuamQxDmIykjO55sWIBSHMO-gsvY2cAP7mk_tuGSkT9mYgW-pzQt0IRY" width="320" /></a></div><br />
 
-<p><em>Первая версия выглядела примерно так: много пустоты, немного оранжевого шума и честное окно Toy Bookmap Heatmap.</em></p>
+<h2>Главный цикл - просто таймер</h2>
 
-<h2>Что происходило каждые 100 миллисекунд</h2>
-
-<p>Главный цикл выглядел почти неприлично понятно:</p>
-
-<pre style="background:#f5f5f5;border:1px solid #ddd;overflow:auto;padding:12px;"><code>Timer timer = new Timer(100, e -&gt; {
+<pre style="background: rgb(245, 245, 245); border: 1px solid rgb(221, 221, 221); overflow: auto; padding: 12px;"><code>Timer timer = new Timer(100, e -&gt; {
     generateFakeData();
     repaint();
 });</code></pre>
@@ -66,13 +48,13 @@ private final int[][] heatmap =
   <li>Swing получал просьбу перерисовать панель.</li>
 </ol>
 
-<p>Слово «просьбу» здесь стоит воспринимать буквально. <code>repaint()</code> не рисует немедленно, а ставит перерисовку в очередь EDT. Swing ещё подумает, когда именно заняться нашими художествами.</p>
+<p>Слово «просьбу» здесь стоит воспринимать буквально. <code>repaint()</code> не рисует немедленно, а ставит перерисовку в очередь EDT. Swing сам разберется.</p>
 
 <h2>Один маленький сдвиг</h2>
 
 <p>Для добавления новой колонки каждая строка массива сдвигалась на одну позицию:</p>
 
-<pre style="background:#f5f5f5;border:1px solid #ddd;overflow:auto;padding:12px;"><code>for (int y = 0; y &lt; PRICE_LEVELS; y++) {
+<pre style="background: rgb(245, 245, 245); border: 1px solid rgb(221, 221, 221); overflow: auto; padding: 12px;"><code>for (int y = 0; y &lt; PRICE_LEVELS; y++) {
     System.arraycopy(
             heatmap[y],
             1,
@@ -84,25 +66,23 @@ private final int[][] heatmap =
     heatmap[y][TIME_BUCKETS - 1] = 0;
 }</code></pre>
 
-<p>Выглядит вполне невинно. Тем более <code>System.arraycopy</code> — не самописный цикл, JVM умеет выполнять его достаточно эффективно.</p>
+<p><code>System.arraycopy</code>&nbsp; JVM выполянет очень хорошо.</p>
 
-<p>Но полезно посчитать масштаб:</p>
+<p>Посчитаем операции:</p>
 
-<pre style="background:#f5f5f5;border:1px solid #ddd;overflow:auto;padding:12px;"><code>200 строк × 799 элементов = 159 800 скопированных int за tick</code></pre>
+<pre style="background: rgb(245, 245, 245); border: 1px solid rgb(221, 221, 221); overflow: auto; padding: 12px;"><code>200 строк × 799 элементов = 159 800 скопированных int за tick</code></pre>
 
 <p>При интервале 100 мс получается до десяти таких обновлений в секунду:</p>
 
-<pre style="background:#f5f5f5;border:1px solid #ddd;overflow:auto;padding:12px;"><code>примерно 1,6 млн перемещений int в секунду</code></pre>
+<pre style="background: rgb(245, 245, 245); border: 1px solid rgb(221, 221, 221); overflow: auto; padding: 12px;"><code>примерно 1,6 млн перемещений int в секунду</code></pre>
 
-<p>Это ещё не диагноз. Последовательное копирование примитивов может быть очень быстрым. Но теперь хотя бы понятно, что «добавить одну колонку» физически означает «передвинуть почти всю историю».</p>
+<p>Это к тому - «добавить одну колонку» физически означает «передвинуть всю историю».</p>
 
-<p>Название метода и цена операции иногда живут в разных районах города.</p>
-
-<h2>Затем приходит paintComponent</h2>
+<h2>paintComponent</h2>
 
 <p>После обновления данных <code>paintComponent</code> снова проходил по всей матрице:</p>
 
-<pre style="background:#f5f5f5;border:1px solid #ddd;overflow:auto;padding:12px;"><code>for (int y = 0; y &lt; PRICE_LEVELS; y++) {
+<pre style="background: rgb(245, 245, 245); border: 1px solid rgb(221, 221, 221); overflow: auto; padding: 12px;"><code>for (int y = 0; y &lt; PRICE_LEVELS; y++) {
     for (int x = 0; x &lt; TIME_BUCKETS; x++) {
         int volume = heatmap[y][x];
 
@@ -122,19 +102,17 @@ private final int[][] heatmap =
 
 <p>Если представить десять полных отрисовок в секунду, получим ещё примерно 1,6 млн проверок ячеек в секунду.</p>
 
-<p>Цифры сами по себе не выглядят катастрофическими для современного процессора. Поэтому первая версия и работала нормально.</p>
+<p>Для современного процессора эти цифры вполне подъемные. Поэтому первая версия и работала нормально.</p>
 
-<p>И это важный момент: простой код не был ошибкой. Для первой задачи он был вполне разумным.</p>
-
-<p><strong>[Вставить изображение: artifacts/baseline/02-baseline-code.png]</strong></p>
+<div class="separator" style="clear: both; text-align: center;"><a href="https://blogger.googleusercontent.com/img/a/AVvXsEgYVoIofSs7TswuTBhwJ_bu8KRmMkGKRnLmdxAghq6SbeyDjrzg2K2rt6V0X0a-ddrCdfvKHaCBhijIfq7pcwPVgWughPfH5Jv3y2UFkm5-kaXN5D8MGpOmgOA7UEk49cJImnM-TwNnuzuH-3Pww22nfyJfwJhngVSaYXmMD6ShDLB1ZGOb3_WibZ_2i9yx" style="margin-left: 1em; margin-right: 1em;"><img alt="" data-original-height="660" data-original-width="919" height="230" src="https://blogger.googleusercontent.com/img/a/AVvXsEgYVoIofSs7TswuTBhwJ_bu8KRmMkGKRnLmdxAghq6SbeyDjrzg2K2rt6V0X0a-ddrCdfvKHaCBhijIfq7pcwPVgWughPfH5Jv3y2UFkm5-kaXN5D8MGpOmgOA7UEk49cJImnM-TwNnuzuH-3Pww22nfyJfwJhngVSaYXmMD6ShDLB1ZGOb3_WibZ_2i9yx" width="320" /></a></div><br />
 
 <p><em>На скриншоте видно главное: Timer, generateFakeData(), repaint() и тот самый сдвиг строк через System.arraycopy.</em></p>
 
 <h2>Небольшая магия: цвет и координаты</h2>
 
-<p>В первой версии были ещё несколько строк, которые на первый взгляд выглядят как заклинание из учебника по Swing:</p>
+<p>Дальше надо&nbsp; наши данные вывести н аэкран - и здесь уже без нужно перейти в модель - которую нам дает Swing для работы с отображением:</p>
 
-<pre style="background:#f5f5f5;border:1px solid #ddd;overflow:auto;padding:12px;"><code>double cellW = w / (double) TIME_BUCKETS;
+<pre style="background: rgb(245, 245, 245); border: 1px solid rgb(221, 221, 221); overflow: auto; padding: 12px;"><code>double cellW = w / (double) TIME_BUCKETS;
 double cellH = h / (double) PRICE_LEVELS;
 
 int intensity = Math.min(255, volume * 4);
@@ -150,20 +128,20 @@ g.fillRect(
         Math.max(1, (int) cellH + 1)
 );</code></pre>
 
-<p>На самом деле здесь три простые идеи.</p>
+<p>Здесь три простые идеи.</p>
 
 <p>Первая: размер одной ячейки на экране.</p>
 
-<pre style="background:#f5f5f5;border:1px solid #ddd;overflow:auto;padding:12px;"><code>double cellW = w / (double) TIME_BUCKETS;
+<pre style="background: rgb(245, 245, 245); border: 1px solid rgb(221, 221, 221); overflow: auto; padding: 12px;"><code>double cellW = w / (double) TIME_BUCKETS;
 double cellH = h / (double) PRICE_LEVELS;</code></pre>
 
 <p>Если у нас 800 временных колонок, а окно шириной 1200 пикселей, одна колонка занимает примерно <code>1.5</code> пикселя. Если 200 ценовых уровней и окно высотой 700 пикселей, один уровень занимает примерно <code>3.5</code> пикселя.</p>
 
-<p>То есть массив не рисуется “как есть”. Каждая ячейка массива сначала переводится в прямоугольник на экране.</p>
+<p>То есть массив не рисуется “как есть”. Каждая ячейка массива сначала переводится в прямоугольник на экране. И важно - уже здесь мы сходу получаем масштабирование -&nbsp; при изменеиии размера копонента мы получим изменение и данных!</p>
 
 <p>Вторая идея: объём превращается в цвет.</p>
 
-<pre style="background:#f5f5f5;border:1px solid #ddd;overflow:auto;padding:12px;"><code>int intensity = Math.min(255, volume * 4);
+<pre style="background: rgb(245, 245, 245); border: 1px solid rgb(221, 221, 221); overflow: auto; padding: 12px;"><code>int intensity = Math.min(255, volume * 4);
 g.setColor(new Color(intensity, intensity / 2, 0));</code></pre>
 
 <p><code>volume</code> — это число в ячейке heatmap. Чем оно больше, тем ярче должен быть квадратик.</p>
@@ -172,7 +150,7 @@ g.setColor(new Color(intensity, intensity / 2, 0));</code></pre>
 
 <p>Дальше цвет собирается так:</p>
 
-<pre style="background:#f5f5f5;border:1px solid #ddd;overflow:auto;padding:12px;"><code>red   = intensity
+<pre style="background: rgb(245, 245, 245); border: 1px solid rgb(221, 221, 221); overflow: auto; padding: 12px;"><code>red   = intensity
 green = intensity / 2
 blue  = 0</code></pre>
 
@@ -180,32 +158,32 @@ blue  = 0</code></pre>
 
 <p>Третья идея: координаты массива переводятся в координаты Swing.</p>
 
-<pre style="background:#f5f5f5;border:1px solid #ddd;overflow:auto;padding:12px;"><code>int px = (int) (x * cellW);
+<pre style="background: rgb(245, 245, 245); border: 1px solid rgb(221, 221, 221); overflow: auto; padding: 12px;"><code>int px = (int) (x * cellW);
 int py = (int) ((PRICE_LEVELS - 1 - y) * cellH);</code></pre>
 
 <p>С <code>x</code> всё почти честно:</p>
 
-<pre style="background:#f5f5f5;border:1px solid #ddd;overflow:auto;padding:12px;"><code>x = 0   → левый край
+<pre style="background: rgb(245, 245, 245); border: 1px solid rgb(221, 221, 221); overflow: auto; padding: 12px;"><code>x = 0   → левый край
 x = 799 → правый край</code></pre>
 
-<p>А вот с <code>y</code> есть ловушка. В массиве <code>y</code> — это ценовой уровень. Логически хочется, чтобы большие цены были выше. Но в Swing координата <code>y = 0</code> находится сверху, а дальше <code>y</code> растёт вниз.</p>
+<p>А вот с <code>y</code> есть ловушка. В массиве <code>y</code>&nbsp;- это ценовой уровень. Логически хочется, чтобы большие цены были выше. Но в Swing координата <code>y = 0</code> находится сверху, а дальше <code>y</code> растёт вниз.</p>
 
 <p>Поэтому появляется переворот:</p>
 
-<pre style="background:#f5f5f5;border:1px solid #ddd;overflow:auto;padding:12px;"><code>PRICE_LEVELS - 1 - y</code></pre>
+<pre style="background: rgb(245, 245, 245); border: 1px solid rgb(221, 221, 221); overflow: auto; padding: 12px;"><code>PRICE_LEVELS - 1 - y</code></pre>
 
-<p>Без него график был бы нарисован вверх ногами. Не катастрофа, конечно, но рынок и так достаточно унижает людей — не надо ещё и ось цены переворачивать.</p>
+<p>Без него график был бы нарисован вверх ногами.&nbsp;</p>
 
 <p>И последняя маленькая страховка:</p>
 
-<pre style="background:#f5f5f5;border:1px solid #ddd;overflow:auto;padding:12px;"><code>Math.max(1, (int) cellW + 1)
+<pre style="background: rgb(245, 245, 245); border: 1px solid rgb(221, 221, 221); overflow: auto; padding: 12px;"><code>Math.max(1, (int) cellW + 1)
 Math.max(1, (int) cellH + 1)</code></pre>
 
-<p>Она гарантирует, что прямоугольник будет хотя бы <code>1 × 1</code> пиксель. Если окно маленькое или колонок слишком много, <code>cellW</code> может стать меньше одного пикселя. После приведения к <code>int</code> это легко превращается в <code>0</code>, а прямоугольник шириной <code>0</code> Swing нарисует примерно никак. Очень быстро, но бесполезно.</p>
+<p>Она гарантирует, что прямоугольник будет хотя бы <code>1 × 1</code> пиксель. Если окно маленькое или колонок слишком много, <code>cellW</code> может стать меньше одного пикселя.&nbsp;</p>
 
 <p>В итоге вся “магия” сводится к простому конвейеру:</p>
 
-<pre style="background:#f5f5f5;border:1px solid #ddd;overflow:auto;padding:12px;"><code>heatmap[y][x]
+<pre style="background: rgb(245, 245, 245); border: 1px solid rgb(221, 221, 221); overflow: auto; padding: 12px;"><code>heatmap[y][x]
 → volume
 → яркость оранжевого
 → x/y массива
@@ -214,25 +192,87 @@ Math.max(1, (int) cellH + 1)</code></pre>
 
 <p>На этом месте первую версию уже можно считать разобранной.</p>
 
-<p>Она не была “плохой”. Наоборот, для первого шага это почти идеальный вариант: один <code>JPanel</code>, один двумерный массив, один <code>Timer</code>, один метод генерации и один метод рисования.</p>
+<p>Для первого шага это почти идеальный вариант: один <code>JPanel</code>, один двумерный массив, один <code>Timer</code>, один метод генерации и один метод рисования.</p>
 
 <p>Плюс она честно показывает базовую механику:</p>
 
 <ul>
-  <li>время — это столбцы;</li>
-  <li>цена — это строки;</li>
-  <li>объём — это яркость;</li>
-  <li>движение времени — это сдвиг массива влево;</li>
-  <li>картинка на экране — это перевод ячеек массива в прямоугольники Swing.</li>
+  <li>время - это столбцы;</li>
+  <li>цена - это строки;</li>
+  <li>объём - это яркость;</li>
+  <li>движение времени - это сдвиг массива влево;</li>
+  <li>картинка на экране - это перевод ячеек массива в прямоугольники Swing.</li>
 </ul>
 
-<p>Дальше можно было бы сразу прыгнуть в оптимизации, но пока рано доставать каску и говорить “мы всё перепишем”.</p>
+<h2>Итого: сколько работы делает один tick</h2>
 
-<p>Сначала надо немного усложнить мир.</p>
+<p>Теперь можно собрать всё в одну табличку. Не как настоящий benchmark, а как оценку того, сколько работы мы сами попросили у программы.</p>
 
-<p>В следующей части добавим synthetic order book: появятся заявки, сделки, bid/ask и больше событий на каждый tick. И вот тогда уже станет интереснее: простая heatmap перестанет быть просто оранжевым шумом и начнёт вести себя как маленький рыночный организм.</p>
+<p>На каждый tick таймера, то есть примерно раз в 100 мс, происходит генерация новой колонки:</p>
 
-<p>Спойлер: организм будет нервный.</p>
+<pre style="background: rgb(245, 245, 245); border: 1px solid rgb(221, 221, 221); overflow: auto; padding: 12px;"><code>PRICE_LEVELS = 200
+TIME_BUCKETS = 800
 
-<p>Код проекта:<br>
+сдвиг одной строки:
+TIME_BUCKETS - 1 = 799 int
+
+сдвиг всех строк:
+200 × 799 = 159 800 int
+
+очистка последней колонки:
+200 записей нуля
+
+случайные события:
+100 попыток добавить volume в последнюю колонку</code></pre>
+
+<p>То есть один tick генерации — это примерно:</p>
+
+<pre style="background: rgb(245, 245, 245); border: 1px solid rgb(221, 221, 221); overflow: auto; padding: 12px;"><code>159 800 копирований int
+200 очисток ячеек
+100 случайных обновлений volume
+1 repaint request</code></pre>
+
+<p>При таймере в 100 мс это до 10 tick в секунду:</p>
+
+<pre style="background: rgb(245, 245, 245); border: 1px solid rgb(221, 221, 221); overflow: auto; padding: 12px;"><code>159 800 × 10 = 1 598 000 копирований int / сек
+200 × 10     = 2 000 очисток ячеек / сек
+100 × 10     = 1 000 случайных событий / сек</code></pre>
+
+<p>Потом приходит отрисовка. Если Swing реально делает около 10 полных перерисовок в секунду, то <code>paintComponent</code> каждый раз проходит всю матрицу:</p>
+
+<pre style="background: rgb(245, 245, 245); border: 1px solid rgb(221, 221, 221); overflow: auto; padding: 12px;"><code>200 × 800 = 160 000 проверок ячеек / paint
+160 000 × 10 = 1 600 000 проверок ячеек / сек</code></pre>
+
+<p>Для каждой непустой ячейки дополнительно выполняется:</p>
+
+<ul>
+  <li>расчёт яркости через <code>Math.min(255, volume * 4)</code>;</li>
+  <li>создание <code>new Color(...)</code>;</li>
+  <li>перевод <code>x/y</code> в <code>px/py</code>;</li>
+  <li>расчёт размера прямоугольника через <code>Math.max(1, ...)</code>;</li>
+  <li>вызов <code>fillRect(...)</code>.</li>
+</ul>
+
+<p>Сколько таких непустых ячеек будет — зависит от случайных данных. В одной новой колонке мы делаем 100 попыток добавить volume в диапазоне примерно 80 ценовых уровней. Часть попаданий склеивается в одну и ту же цену, поэтому обычно это не 100 разных квадратиков, а меньше.</p>
+
+<p>Но порядок понятен: после прогрева истории на экране могут быть уже десятки тысяч непустых ячеек. И каждая из них превращается в цветной прямоугольник.</p>
+
+<p>Итог по первой версии:</p>
+
+<pre style="background: rgb(245, 245, 245); border: 1px solid rgb(221, 221, 221); overflow: auto; padding: 12px;"><code>на генерацию:
+≈ 1.6 млн копирований int / сек
+≈ 2 тыс очисток ячеек / сек
+≈ 1 тыс случайных событий / сек
+
+на отрисовку:
+≈ 1.6 млн проверок ячеек / сек
++ цвет, координаты и fillRect для каждой непустой ячейки</code></pre>
+
+<p>И вот теперь цель совпадает с выводом: первая версия простая и понятная, но даже в ней “одна новая колонка” — это не одна операция. Это сдвиг истории, генерация данных, полный проход по матрице и пачка рисования.</p>
+
+<p>Пока это нормально. Но теперь хотя бы видно, что именно начнёт дорожать, когда мы добавим больше событий.</p>
+
+<p>В следующей части добавим synthetic order book: появятся заявки, сделки, bid/ask и больше событий на каждый tick.&nbsp;</p>
+
+<p>Код проекта:<br />
 <a href="https://github.com/IavnFGV/swing-heat-map" target="_blank">github.com/IavnFGV/swing-heat-map</a></p>
