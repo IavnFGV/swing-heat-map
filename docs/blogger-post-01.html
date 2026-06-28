@@ -130,6 +130,88 @@ private final int[][] heatmap =
 
 <p><em>На скриншоте видно главное: Timer, generateFakeData(), repaint() и тот самый сдвиг строк через System.arraycopy.</em></p>
 
+<h2>Небольшая магия: цвет и координаты</h2>
+
+<p>В первой версии были ещё несколько строк, которые на первый взгляд выглядят как заклинание из учебника по Swing:</p>
+
+<pre style="background:#f5f5f5;border:1px solid #ddd;overflow:auto;padding:12px;"><code>double cellW = w / (double) TIME_BUCKETS;
+double cellH = h / (double) PRICE_LEVELS;
+
+int intensity = Math.min(255, volume * 4);
+g.setColor(new Color(intensity, intensity / 2, 0));
+
+int px = (int) (x * cellW);
+int py = (int) ((PRICE_LEVELS - 1 - y) * cellH);
+
+g.fillRect(
+        px,
+        py,
+        Math.max(1, (int) cellW + 1),
+        Math.max(1, (int) cellH + 1)
+);</code></pre>
+
+<p>На самом деле здесь три простые идеи.</p>
+
+<p>Первая: размер одной ячейки на экране.</p>
+
+<pre style="background:#f5f5f5;border:1px solid #ddd;overflow:auto;padding:12px;"><code>double cellW = w / (double) TIME_BUCKETS;
+double cellH = h / (double) PRICE_LEVELS;</code></pre>
+
+<p>Если у нас 800 временных колонок, а окно шириной 1200 пикселей, одна колонка занимает примерно <code>1.5</code> пикселя. Если 200 ценовых уровней и окно высотой 700 пикселей, один уровень занимает примерно <code>3.5</code> пикселя.</p>
+
+<p>То есть массив не рисуется “как есть”. Каждая ячейка массива сначала переводится в прямоугольник на экране.</p>
+
+<p>Вторая идея: объём превращается в цвет.</p>
+
+<pre style="background:#f5f5f5;border:1px solid #ddd;overflow:auto;padding:12px;"><code>int intensity = Math.min(255, volume * 4);
+g.setColor(new Color(intensity, intensity / 2, 0));</code></pre>
+
+<p><code>volume</code> — это число в ячейке heatmap. Чем оно больше, тем ярче должен быть квадратик.</p>
+
+<p><code>volume * 4</code> просто усиливает эффект, чтобы маленькие значения не были почти чёрными. А <code>Math.min(255, ...)</code> ставит потолок, потому что RGB-канал не может быть больше <code>255</code>.</p>
+
+<p>Дальше цвет собирается так:</p>
+
+<pre style="background:#f5f5f5;border:1px solid #ddd;overflow:auto;padding:12px;"><code>red   = intensity
+green = intensity / 2
+blue  = 0</code></pre>
+
+<p>Получается оранжевый: чем больше объём, тем ярче “жар”.</p>
+
+<p>Третья идея: координаты массива переводятся в координаты Swing.</p>
+
+<pre style="background:#f5f5f5;border:1px solid #ddd;overflow:auto;padding:12px;"><code>int px = (int) (x * cellW);
+int py = (int) ((PRICE_LEVELS - 1 - y) * cellH);</code></pre>
+
+<p>С <code>x</code> всё почти честно:</p>
+
+<pre style="background:#f5f5f5;border:1px solid #ddd;overflow:auto;padding:12px;"><code>x = 0   → левый край
+x = 799 → правый край</code></pre>
+
+<p>А вот с <code>y</code> есть ловушка. В массиве <code>y</code> — это ценовой уровень. Логически хочется, чтобы большие цены были выше. Но в Swing координата <code>y = 0</code> находится сверху, а дальше <code>y</code> растёт вниз.</p>
+
+<p>Поэтому появляется переворот:</p>
+
+<pre style="background:#f5f5f5;border:1px solid #ddd;overflow:auto;padding:12px;"><code>PRICE_LEVELS - 1 - y</code></pre>
+
+<p>Без него график был бы нарисован вверх ногами. Не катастрофа, конечно, но рынок и так достаточно унижает людей — не надо ещё и ось цены переворачивать.</p>
+
+<p>И последняя маленькая страховка:</p>
+
+<pre style="background:#f5f5f5;border:1px solid #ddd;overflow:auto;padding:12px;"><code>Math.max(1, (int) cellW + 1)
+Math.max(1, (int) cellH + 1)</code></pre>
+
+<p>Она гарантирует, что прямоугольник будет хотя бы <code>1 × 1</code> пиксель. Если окно маленькое или колонок слишком много, <code>cellW</code> может стать меньше одного пикселя. После приведения к <code>int</code> это легко превращается в <code>0</code>, а прямоугольник шириной <code>0</code> Swing нарисует примерно никак. Очень быстро, но бесполезно.</p>
+
+<p>В итоге вся “магия” сводится к простому конвейеру:</p>
+
+<pre style="background:#f5f5f5;border:1px solid #ddd;overflow:auto;padding:12px;"><code>heatmap[y][x]
+→ volume
+→ яркость оранжевого
+→ x/y массива
+→ px/py на экране
+→ fillRect(...)</code></pre>
+
 <h2>А потом я немного изменил условия</h2>
 
 <p>Через два коммита в проекте появился synthetic order book:</p>
