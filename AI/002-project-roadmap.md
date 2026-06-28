@@ -1117,3 +1117,49 @@ Baseline/demo папка:
 
 - `docs/blogger-post-02.md`;
 - `docs/blogger-post-02.html`.
+
+### 2026-06-28 — репозиторий разделён на main / articles / demo worktrees
+
+Проблема:
+
+- ветки для статей начали смешиваться с основной рабочей папкой проекта;
+- пользователь ожидает, что `D:\projects\swing-heat-map` остаётся основным кодовым проектом;
+- материалы статей и demo-код должны жить отдельно, чтобы не ломать контекст в IDE.
+
+Решение:
+
+- `main` возвращён к состоянию до статей;
+- создана отдельная ветка `articles` для всех материалов публикаций;
+- создан отдельный worktree для статей;
+- demo-код для статей развивается в отдельной baseline/demo-папке.
+
+Текущая структура:
+
+```text
+D:\projects\swing-heat-map
+  ветка: main
+  назначение: основной код проекта, без материалов статей
+  текущий commit: 9abf7c1 Store market data as zip
+
+D:\projects\swing-heat-map-articles
+  ветка: articles
+  назначение: AI roadmap, docs, Blogger HTML, article drafts, artifacts
+  текущий commit перед этой записью: a3b014c Align profiler post with ugly baseline demo
+
+D:\projects\swing-heat-map-baseline
+  ветка: demo/ugly-heatmap-profiler
+  назначение: экспериментальный код для текущей статьи
+  текущий commit: 18f3cb1 Add profiler window to baseline heatmap
+```
+
+GitHub:
+
+- `main` force-with-lease возвращён к `9abf7c1`;
+- `articles` запушена;
+- `demo/ugly-heatmap-profiler` запушена.
+
+Правило дальше:
+
+- статьи редактировать в `D:\projects\swing-heat-map-articles`;
+- основной код смотреть/развивать в `D:\projects\swing-heat-map`;
+- кодовые demo под статьи делать в `D:\projects\swing-heat-map-baseline` или в отдельных worktree, если появится новая demo-линия.
