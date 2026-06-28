@@ -984,3 +984,28 @@ java -cp build/classes/java/main io.drozda.coding.demo.Starter
 
 - при желании обновить опубликованный Blogger-пост из `docs/blogger-post-01.html`;
 - следующую часть начать с synthetic order book: заявки, сделки, bid/ask, больше событий на tick.
+
+### 2026-06-28 — подготовлен третий этап: synthetic order book
+
+GitHub:
+
+- основная ветка `main` запушена в `origin` до коммита `c396fe3`.
+
+Рабочая папка для показа эволюции:
+
+- `D:\projects\swing-heat-map-baseline`;
+- переключена с `b0658a5` на `45d73e8`;
+- текущий коммит: `45d73e8 Add synthetic order book state for heatmap rendering`;
+- сборка `.\gradlew.bat clean build` успешна.
+
+Причина выбора:
+
+- это следующий естественный шаг после базовой heatmap;
+- появляется `OrderBook`;
+- heatmap перестаёт быть просто случайным оранжевым шумом;
+- тема третьей публикации: как synthetic order book меняет генерацию данных и смысл ячеек.
+
+Важно:
+
+- пользователь открыл VS Code в этой же baseline-папке, поэтому дальше работаем с ней, не заставляя прыгать между каталогами;
+- если нужно вернуться к первой версии, коммит baseline: `b0658a5`.
