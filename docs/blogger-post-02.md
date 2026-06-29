@@ -161,12 +161,14 @@ public final class Profiler {
         return metrics.getOrDefault(eventType, 0.0);
     }
 
-    public enum EventType {
+public enum EventType {
         GENERATE_DATA,
         PAINT
     }
 }
 ```
+
+`ConcurrentHashMap` здесь не потому, что я уже строю высоконагруженную систему мониторинга. Просто profiler — общая маленькая коробка с метриками. Сегодня всё почти живёт на EDT, а завтра генерация данных может уехать в отдельный поток. Пусть это место сразу будет безопасным для таких экспериментов.
 
 Идея такая:
 
