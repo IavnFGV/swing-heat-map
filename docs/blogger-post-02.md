@@ -13,8 +13,7 @@ java, swing, performance, profiler, visualization
 Перед публикацией желательно добавить:
 
 - screenshot ugly heatmap + debug window: `artifacts/profiler/01-profiler-ui.png`;
-- screenshot `Profiler.java`: `artifacts/profiler/02-profiler-code.png`;
-- screenshot `HeatmapPanel` с `Profiler.measure(...)`: `artifacts/profiler/03-measure-points.png`.
+- по желанию screenshot `HeatmapPanel` с `Profiler.measure(...)`: `artifacts/profiler/03-measure-points.png`.
 
 Demo branch:
 
@@ -180,8 +179,6 @@ public enum EventType {
 Это не промышленный profiling.
 
 Это первый фонарик.
-
-> Здесь вставить screenshot: `artifacts/profiler/02-profiler-code.png`.
 
 ## Куда навешиваем измерения
 

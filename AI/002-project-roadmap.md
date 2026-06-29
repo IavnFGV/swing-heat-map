@@ -1075,8 +1075,7 @@ Baseline/demo папка:
 Перед публикацией нужны новые артефакты:
 
 1. `artifacts/profiler/01-profiler-ui.png` — приложение + окно `Debug info`;
-2. `artifacts/profiler/02-profiler-code.png` — код `Profiler`;
-3. по желанию screenshot мест с `Profiler.measure(...)` в `HeatmapPanel`.
+2. по желанию `artifacts/profiler/03-measure-points.png` — screenshot мест с `Profiler.measure(...)` в `HeatmapPanel`.
 
 ### 2026-06-28 — создана правильная demo-ветка: ugly heatmap + profiler
 
