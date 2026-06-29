@@ -18,8 +18,9 @@ java, swing, performance, profiler, visualization
 Demo branch:
 
 ```text
-demo/ugly-heatmap-profiler
+demo/article-series
 18f3cb1 Add profiler window to baseline heatmap
+tag: article-03-profiler-window
 ```
 
 ---
@@ -341,6 +342,10 @@ Heatmap осталась такой же простой и немного стр
 
 В следующей части уже можно будет менять условия: увеличивать частоту, количество событий, размер данных — и смотреть не “кажется быстрее”, а что меняется в цифрах.
 
-Код demo-ветки:
+Код этого этапа:
 
-https://github.com/IavnFGV/swing-heat-map/tree/demo/ugly-heatmap-profiler
+https://github.com/IavnFGV/swing-heat-map/tree/article-03-profiler-window
+
+Ветка всей серии:
+
+https://github.com/IavnFGV/swing-heat-map/tree/demo/article-series

@@ -1091,7 +1091,7 @@ Baseline/demo папка:
 - оставить heatmap такой же простой и страшненькой;
 - добавить только `InfoFrame`, `Profiler` и минимальные runtime-метрики.
 
-Создана и запушена demo-ветка:
+Создана и запушена первая demo-ветка:
 
 - `demo/ugly-heatmap-profiler`;
 - commit: `18f3cb1 Add profiler window to baseline heatmap`;
@@ -1116,6 +1116,47 @@ Baseline/demo папка:
 
 - `docs/blogger-post-02.md`;
 - `docs/blogger-post-02.html`.
+
+### 2026-06-30 — создана единая кодовая ветка серии и теги этапов
+
+Решение:
+
+- больше не плодить отдельную ветку на каждый эксперимент;
+- вести кодовую историю статей в одной ветке `demo/article-series`;
+- в публикациях ссылаться на конкретные теги, чтобы текст не “переезжал” вместе с веткой.
+
+Создано:
+
+```text
+demo/article-series
+```
+
+Текущие теги:
+
+```text
+article-02-baseline-heatmap  -> b0658a5 initial commit - success render with stubs
+article-03-profiler-window   -> 18f3cb1 Add profiler window to baseline heatmap
+```
+
+Текущая структура:
+
+```text
+D:\projects\swing-heat-map
+  ветка: articles
+  назначение: статьи и материалы
+
+D:\projects\swing-heat-map-baseline
+  ветка: demo/article-series
+  назначение: кодовая история серии статей
+```
+
+Старая ветка:
+
+```text
+demo/ugly-heatmap-profiler
+```
+
+пока оставлена как страховка, но дальше основной demo-код вести в `demo/article-series`.
 
 ### 2026-06-28 — репозиторий разделён на articles / demo
 
