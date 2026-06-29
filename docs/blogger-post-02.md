@@ -94,7 +94,9 @@ private static final int RANDOM_UPDATES_PER_TICK = 100;
 
 То есть это всё ещё тот самый прототип. Просто теперь рядом будет табличка с цифрами.
 
-> Здесь вставить screenshot: `artifacts/profiler/01-profiler-ui.png`.
+![Ugly heatmap с debug window](../artifacts/profiler/01-profiler-ui.png)
+
+Вот так это выглядит: тот же простой heatmap, но рядом уже есть окно с FPS, временем генерации, временем рисования и расчётами по матрице.
 
 ## Окно Debug info
 
