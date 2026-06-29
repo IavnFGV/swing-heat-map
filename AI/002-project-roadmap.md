@@ -1118,33 +1118,27 @@ Baseline/demo папка:
 - `docs/blogger-post-02.md`;
 - `docs/blogger-post-02.html`.
 
-### 2026-06-28 — репозиторий разделён на main / articles / demo worktrees
+### 2026-06-28 — репозиторий разделён на articles / demo
 
 Проблема:
 
 - ветки для статей начали смешиваться с основной рабочей папкой проекта;
-- пользователь ожидает, что `D:\projects\swing-heat-map` остаётся основным кодовым проектом;
+- пользователь ожидает, что в текущей папке можно работать со статьями, не прыгая в отдельный каталог;
 - материалы статей и demo-код должны жить отдельно, чтобы не ломать контекст в IDE.
 
 Решение:
 
-- `main` возвращён к состоянию до статей;
-- создана отдельная ветка `articles` для всех материалов публикаций;
-- создан отдельный worktree для статей;
+- `main` возвращён к состоянию до статей и остаётся на GitHub как чистая кодовая ветка;
+- текущая рабочая папка `D:\projects\swing-heat-map` переключена на ветку `articles`;
 - demo-код для статей развивается в отдельной baseline/demo-папке.
 
 Текущая структура:
 
 ```text
 D:\projects\swing-heat-map
-  ветка: main
-  назначение: основной код проекта, без материалов статей
-  текущий commit: 9abf7c1 Store market data as zip
-
-D:\projects\swing-heat-map-articles
   ветка: articles
   назначение: AI roadmap, docs, Blogger HTML, article drafts, artifacts
-  текущий commit перед этой записью: a3b014c Align profiler post with ugly baseline demo
+  текущий commit перед этой записью: 306e289 Document repository worktree split
 
 D:\projects\swing-heat-map-baseline
   ветка: demo/ugly-heatmap-profiler
@@ -1160,6 +1154,26 @@ GitHub:
 
 Правило дальше:
 
-- статьи редактировать в `D:\projects\swing-heat-map-articles`;
-- основной код смотреть/развивать в `D:\projects\swing-heat-map`;
+- статьи редактировать в `D:\projects\swing-heat-map` на ветке `articles`;
+- если нужен чистый основной код, переключаться на `main`;
 - кодовые demo под статьи делать в `D:\projects\swing-heat-map-baseline` или в отдельных worktree, если появится новая demo-линия.
+
+### 2026-06-29 — отдельный worktree статей удалён
+
+По просьбе пользователя упрощена схема:
+
+- удалён worktree `D:\projects\swing-heat-map-articles`;
+- текущая папка `D:\projects\swing-heat-map` переключена на ветку `articles`;
+- `D:\projects\swing-heat-map-baseline` остаётся demo-папкой для кода статей.
+
+Текущее состояние:
+
+```text
+D:\projects\swing-heat-map
+  ветка: articles
+  назначение: статьи и материалы
+
+D:\projects\swing-heat-map-baseline
+  ветка: demo/ugly-heatmap-profiler
+  назначение: экспериментальный код для третьей статьи
+```
